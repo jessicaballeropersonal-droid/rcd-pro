@@ -86,6 +86,16 @@
   .badge.off{background:#EEEEEA;color:var(--muted)}
   .rowbtns{display:flex;gap:6px;justify-content:flex-end}
   .empty{color:var(--muted);font-size:13px;padding:18px 4px;text-align:center}
+  /* Avisos propios de la app */
+  .rcdtoast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;transition:.22s;z-index:80;background:var(--esc-d);color:#fff;padding:12px 18px;border-radius:11px;font-size:13.5px;font-weight:600;box-shadow:0 10px 34px rgba(0,0,0,.22);max-width:90vw;text-align:center}
+  .rcdtoast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .rcdtoast.error{background:var(--bad)}
+  .rcdtoast.info{background:var(--ink)}
+  .rcdmodal{position:fixed;inset:0;background:rgba(20,30,28,.45);display:none;align-items:center;justify-content:center;z-index:85;padding:20px}
+  .rcdmodal.show{display:flex}
+  .rcdm-card{background:#fff;border-radius:16px;padding:22px 22px 18px;max-width:380px;width:100%;box-shadow:0 22px 64px rgba(0,0,0,.3)}
+  .rcdm-msg{font-size:15px;color:var(--ink);line-height:1.5;margin-bottom:20px}
+  .rcdm-btns{display:flex;gap:10px;justify-content:flex-end}
 
   @media(max-width:820px){
     .sidebar{position:fixed;z-index:30;left:0;top:0;transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 40px rgba(0,0,0,.2)}
@@ -113,6 +123,17 @@
   </div>
 </div>
 
+<div id="rcdToast" class="rcdtoast"></div>
+<div id="rcdModal" class="rcdmodal">
+  <div class="rcdm-card">
+    <div class="rcdm-msg"></div>
+    <div class="rcdm-btns">
+      <button class="btn ghost rcdm-cancel">Cancelar</button>
+      <button class="btn primary rcdm-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODULOS (cada uno en su archivo) ===== -->
 <script src="mod-parametros.js"></script>
 
@@ -134,6 +155,36 @@
     headers,
     rpc: (fn, body) => fetch(SUPABASE_URL+'/rest/v1/rpc/'+fn, {method:'POST', headers, body:JSON.stringify(body||{})}).then(r=>r.json()),
     can: (clave, accion) => { const m = MENU.find(x=>x.clave===clave); return m ? !!m[accion] : false; }
+  };
+
+  // Aviso tipo toast (ok / error / info)
+  RCD.toast = function(msg, tipo){
+    const t = $('rcdToast');
+    t.className = 'rcdtoast ' + (tipo || 'ok');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(RCD._tt);
+    RCD._tt = setTimeout(()=>t.classList.remove('show'), 3000);
+  };
+
+  // Confirmacion con modal (devuelve Promise<boolean>)
+  RCD.confirm = function(msg, opts){
+    opts = opts || {};
+    return new Promise(resolve=>{
+      const ov = $('rcdModal');
+      ov.querySelector('.rcdm-msg').textContent = msg;
+      ov.querySelector('.rcdm-ok').textContent = opts.ok || 'Confirmar';
+      ov.querySelector('.rcdm-cancel').textContent = opts.cancel || 'Cancelar';
+      ov.classList.add('show');
+      const cerrar = val => {
+        ov.classList.remove('show');
+        ov.querySelector('.rcdm-ok').onclick = null;
+        ov.querySelector('.rcdm-cancel').onclick = null;
+        resolve(val);
+      };
+      ov.querySelector('.rcdm-ok').onclick = ()=>cerrar(true);
+      ov.querySelector('.rcdm-cancel').onclick = ()=>cerrar(false);
+    });
   };
 
   async function init(){
