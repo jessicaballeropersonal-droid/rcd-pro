@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCD Pro · Acceso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#E7E7E3;--surface:#FFFFFF;--ink:#1A2B27;--muted:#6E7A77;--line:#D9E2DF;
+    --esc:#0F766E;--esc-soft:#E2F3F0;--esc-d:#0B4A45;--orange:#E8620A;--bad:#B91C1C;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(1100px 500px at 50% -10%, #DCEAE7 0%, transparent 60%),var(--bg);
+    color:var(--ink);font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+    display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px rgba(15,118,110,.12);overflow:hidden}
+  .top{background:var(--esc);height:7px}
+  .pad{padding:28px 28px 24px}
+  .brandbox{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:24px}
+  .wordmark{font-weight:900;font-size:34px;letter-spacing:-.02em;color:var(--esc-d);line-height:1}
+  .wordmark b{color:var(--orange)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+  .field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff}
+  .field input:focus{outline:2px solid var(--esc);border-color:var(--esc)}
+  .enter{width:100%;background:var(--esc);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow';font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+  .enter:hover{background:var(--esc-d)}
+  .enter:disabled{opacity:.6;cursor:default}
+  .links{display:flex;justify-content:center;margin-top:16px}
+  .links a{color:var(--esc);font-size:13px;font-weight:600;text-decoration:none;cursor:pointer}
+  .hint{margin-top:18px;background:var(--esc-soft);border:1px solid #C4E3DD;border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--esc-d);font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.5}
+  .err{margin-top:14px;background:#FBEAEA;border:1px solid #E7C2C2;border-radius:9px;padding:10px 12px;font-size:12.5px;color:var(--bad);text-align:center;display:none}
+  .err.show{display:block}
+  .pagenote{position:fixed;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="top"></div>
+    <div class="pad">
+      <div class="brandbox"><div class="wordmark">RCD <b>Pro</b></div></div>
+      <div class="field"><label>Usuario</label><input id="usuario" autocomplete="username" placeholder="tu usuario"></div>
+      <div class="field"><label>Clave</label><input id="clave" type="password" autocomplete="current-password" placeholder="tu clave"></div>
+      <button class="enter" id="btn" onclick="entrar()">Entrar</button>
+      <div class="links"><a onclick="alert('La recuperacion de clave se habilita mas adelante. Por ahora pidela al administrador.')">Olvidaste tu clave?</a></div>
+      <div class="err" id="err"></div>
+      <div class="hint">Cada usuario entra a su primer modulo permitido, segun sus permisos.</div>
+    </div>
+  </div>
+  <div class="pagenote">RCD Pro</div>
+
+<script>
+  // ====== CONEXION A SUPABASE ======
+  const SUPABASE_URL  = "https://ymzxjuncantobxeftfqd.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltenhqdW5jYW50b2J4ZWZ0ZnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMzM0ODUsImV4cCI6MjA5MjgwOTQ4NX0.p1K6pvZy-Agb2J-mKF2MNR5ujrTfRjmvtTyP3QiIzu8";
+
+  const $ = id => document.getElementById(id);
+
+  async function entrar(){
+    const usuario = $('usuario').value.trim();
+    const clave   = $('clave').value;
+    const err     = $('err');
+    err.classList.remove('show');
+
+    if(!usuario || !clave){ showErr('Escribe tu usuario y tu clave.'); return; }
+
+    $('btn').disabled = true; $('btn').textContent = 'Entrando...';
+
+    try{
+      const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/rcd_login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON,
+          'Authorization': 'Bearer ' + SUPABASE_ANON
+        },
+        body: JSON.stringify({ p_usuario: usuario, p_clave: clave })
+      });
+      const data = await r.json();
+
+      if(Array.isArray(data) && data.length > 0){
+        // login correcto -> guardamos la sesion en memoria de la pestana
+        sessionStorage.setItem('rcd_sesion', JSON.stringify(data[0]));
+        // por ahora avisamos; el panel lo armamos en el siguiente paso
+        alert('Bienvenido, ' + data[0].nombre + ' (' + data[0].rol + ').\nLogin OK. El panel se arma en el siguiente paso.');
+        // window.location.href = 'panel.html';  // se activa cuando exista el panel
+      } else {
+        showErr('Usuario o clave incorrectos.');
+      }
+    }catch(e){
+      showErr('No se pudo conectar. Revisa tu internet e intenta de nuevo.');
+    }finally{
+      $('btn').disabled = false; $('btn').textContent = 'Entrar';
+    }
+  }
+
+  function showErr(msg){ const e=$('err'); e.textContent=msg; e.classList.add('show'); }
+
+  // Enter envia el formulario
+  document.addEventListener('keydown', e=>{ if(e.key==='Enter') entrar(); });
+</script>
+</body>
+</html>
