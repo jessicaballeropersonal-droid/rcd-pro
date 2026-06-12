@@ -34,6 +34,7 @@ window.RCD_MODULOS.parametros = function(el, ctx){
   function pintar(){
     const body = el.querySelector('#pBody');
     if(activa==='identidad'){ identidad(body, ctx); }
+    else if(activa==='sucursales'){ sucursales(body, ctx); }
     else {
       body.innerHTML = '<div class="note">Esta seccion se construye en su paso del Grupo 1.</div>';
     }
@@ -122,7 +123,90 @@ async function identidad(body, ctx){
   }
 }
 
+// ---------- Pestana SUCURSALES ----------
+async function sucursales(body, ctx){
+  const puedeCrear    = ctx.can('parametros','escribir');
+  const puedeEditar   = ctx.can('parametros','editar');
+  const puedeEliminar = ctx.can('parametros','eliminar');
+
+  async function cargar(){
+    body.innerHTML = '<div class="loading">Cargando...</div>';
+    let lista=[];
+    try{ const r = await ctx.rpc('rcd_sucursales_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
+    render(lista);
+  }
+
+  function render(lista){
+    body.innerHTML =
+      '<h3 style="margin-top:0">Sucursales</h3>'+
+      '<p class="lead">Las plantas del gestor. El cliente no las ve; el operador elige la sucursal destino.</p>'+
+      (puedeCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="btnNueva">+ Agregar sucursal</button></div>':'')+
+      (lista.length? tabla(lista) : '<div class="empty">Aun no hay sucursales.</div>');
+    if(puedeCrear) body.querySelector('#btnNueva').onclick=()=>form(null);
+    body.querySelectorAll('[data-edit]').forEach(b=>{ const i=+b.dataset.edit; b.onclick=()=>form(lista[i]); });
+    body.querySelectorAll('[data-anular]').forEach(b=>{ const i=+b.dataset.anular; b.onclick=()=>anular(lista[i]); });
+  }
+
+  function tabla(lista){
+    return '<table class="mtable"><tr><th>Sucursal</th><th>Direccion</th><th>Estado</th><th></th></tr>'+
+      lista.map((s,i)=>{
+        const acts =
+          (puedeEditar  ?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
+          (puedeEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'');
+        return '<tr><td><b>'+esc(s.nombre)+'</b></td><td>'+esc(s.direccion||'')+'</td>'+
+          '<td><span class="badge '+(s.activa?'ok':'off')+'">'+(s.activa?'Activa':'Inactiva')+'</span></td>'+
+          '<td><div class="rowbtns">'+(acts||'<span class="mono" style="color:#C9C9C1;font-size:11px">solo lectura</span>')+'</div></td></tr>';
+      }).join('')+'</table>';
+  }
+
+  function form(s){
+    const esNueva = !s;
+    body.innerHTML =
+      '<h3 style="margin-top:0">'+(esNueva?'Nueva sucursal':'Editar sucursal')+'</h3>'+
+      '<div class="field"><label>Nombre</label><input id="s_nombre" value="'+(esNueva?'':esc(s.nombre))+'"></div>'+
+      '<div class="field"><label>Direccion</label><input id="s_direccion" value="'+(esNueva?'':esc(s.direccion||''))+'"></div>'+
+      (esNueva?'':'<div class="field"><label>Estado</label><select id="s_activa"><option value="true"'+(s.activa?' selected':'')+'>Activa</option><option value="false"'+(!s.activa?' selected':'')+'>Inactiva</option></select></div>')+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>';
+    body.querySelector('#bCancel').onclick=cargar;
+    body.querySelector('#bSave').onclick=async function(){
+      const btn=this; const nombre=v(body,'s_nombre');
+      if(!nombre){ alert('Escribe el nombre de la sucursal.'); return; }
+      const activa = esNueva ? true : (body.querySelector('#s_activa').value==='true');
+      btn.disabled=true; btn.textContent='Guardando...';
+      try{
+        const res = await ctx.rpc('rcd_sucursal_guardar',{
+          p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id,
+          p_id: esNueva?null:s.id, p_nombre:nombre, p_direccion:v(body,'s_direccion'), p_activa:activa
+        });
+        const r = scalar(res);
+        if(r==='OK'){ cargar(); return; }
+        if(r==='MIN_UNA_ACTIVA') alert('Debe quedar al menos una sucursal activa.');
+        else if(r==='SIN_PERMISO') alert('No tienes permiso.');
+        else if(r==='NOMBRE_VACIO') alert('El nombre no puede ir vacio.');
+        else alert('No se pudo guardar.');
+      }catch(e){ alert('Error de conexion al guardar.'); }
+      btn.disabled=false; btn.textContent='Guardar';
+    };
+  }
+
+  async function anular(s){
+    if(!confirm('Anular la sucursal "'+s.nombre+'"? Se ocultara, pero el historico queda.')) return;
+    try{
+      const res = await ctx.rpc('rcd_sucursal_anular',{p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:s.id});
+      const r = scalar(res);
+      if(r==='OK'){ cargar(); return; }
+      if(r==='MIN_UNA_ACTIVA') alert('No puedes anular: debe quedar al menos una sucursal activa.');
+      else if(r==='TIENE_MOVIMIENTOS') alert('No se puede anular: la sucursal tiene movimientos.');
+      else if(r==='SIN_PERMISO') alert('No tienes permiso para anular.');
+      else alert('No se pudo anular.');
+    }catch(e){ alert('Error de conexion.'); }
+  }
+
+  cargar();
+}
+
 // ---------- utilidades ----------
+function scalar(res){ return Array.isArray(res) ? res[0] : res; }
 function esc(s){ return (s==null?'':String(s)).replace(/"/g,'&quot;'); }
 function ro(puede){ return puede ? '' : 'readonly'; }
 function v(scope,id){ const e=scope.querySelector('#'+id); return e ? e.value.trim() : ''; }
