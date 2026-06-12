@@ -98,9 +98,9 @@
 
   async function init(){
     $('me').innerHTML = ses.nombre + '<small>' + ses.rol + '</small>';
-    // nombre del gestor
+    // nombre del gestor (por funcion protegida)
     try{
-      const g = await fetch(SUPABASE_URL+'/rest/v1/rcd_gestores?id=eq.'+ses.gestor_id+'&select=nombre', {headers}).then(r=>r.json());
+      const g = await fetch(SUPABASE_URL+'/rest/v1/rpc/rcd_gestor', {method:'POST', headers, body:JSON.stringify({p_gestor_id:ses.gestor_id})}).then(r=>r.json());
       if(Array.isArray(g) && g.length) $('gestorNombre').textContent = g[0].nombre;
     }catch(e){ $('gestorNombre').textContent = ''; }
 
