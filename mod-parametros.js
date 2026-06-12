@@ -78,7 +78,7 @@ async function identidad(body, ctx){
     '</div>'+
     '<div class="field"><label>Direccion</label><input id="f_direccion" value="'+esc(g.direccion)+'" '+ro(puedeEditar)+'></div>'+
     (puedeEditar
-      ? '<div style="display:flex;align-items:center;gap:14px;margin-top:8px"><button class="btn primary" id="btnGuardar">Guardar</button><span class="toast" id="okMsg"><span class="d"></span>Guardado</span></div>'
+      ? '<div style="margin-top:8px"><button class="btn primary" id="btnGuardar">Guardar</button></div>'
       : '<div class="note warn">Solo lectura: no tienes permiso de Editar en Parametros.</div>');
 
   if(puedeEditar){
@@ -109,15 +109,14 @@ async function identidad(body, ctx){
         const ok = (res === 'OK' || (Array.isArray(res) && res[0]==='OK'));
         if(ok){
           nuevoLogo = null;
-          const t = body.querySelector('#okMsg'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2500);
-          // refresca el nombre del gestor en la barra lateral
+          ctx.toast('Identidad guardada');
           const gn = document.getElementById('gestorNombre'); if(gn) gn.textContent = v(body,'f_nombre');
         } else if(res === 'SIN_PERMISO'){
-          alert('No tienes permiso para editar la identidad.');
+          ctx.toast('No tienes permiso para editar la identidad.','error');
         } else {
-          alert('No se pudo guardar. Intenta de nuevo.');
+          ctx.toast('No se pudo guardar. Intenta de nuevo.','error');
         }
-      }catch(e){ alert('Error de conexion al guardar.'); }
+      }catch(e){ ctx.toast('Error de conexion al guardar.','error'); }
       finally{ btn.disabled = false; btn.textContent = 'Guardar'; }
     };
   }
@@ -170,7 +169,7 @@ async function sucursales(body, ctx){
     body.querySelector('#bCancel').onclick=cargar;
     body.querySelector('#bSave').onclick=async function(){
       const btn=this; const nombre=v(body,'s_nombre');
-      if(!nombre){ alert('Escribe el nombre de la sucursal.'); return; }
+      if(!nombre){ ctx.toast('Escribe el nombre de la sucursal.','error'); return; }
       const activa = esNueva ? true : (body.querySelector('#s_activa').value==='true');
       btn.disabled=true; btn.textContent='Guardando...';
       try{
@@ -179,27 +178,27 @@ async function sucursales(body, ctx){
           p_id: esNueva?null:s.id, p_nombre:nombre, p_direccion:v(body,'s_direccion'), p_activa:activa
         });
         const r = scalar(res);
-        if(r==='OK'){ cargar(); return; }
-        if(r==='MIN_UNA_ACTIVA') alert('Debe quedar al menos una sucursal activa.');
-        else if(r==='SIN_PERMISO') alert('No tienes permiso.');
-        else if(r==='NOMBRE_VACIO') alert('El nombre no puede ir vacio.');
-        else alert('No se pudo guardar.');
-      }catch(e){ alert('Error de conexion al guardar.'); }
+        if(r==='OK'){ ctx.toast('Sucursal guardada'); cargar(); return; }
+        if(r==='MIN_UNA_ACTIVA') ctx.toast('Debe quedar al menos una sucursal activa.','error');
+        else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso.','error');
+        else if(r==='NOMBRE_VACIO') ctx.toast('El nombre no puede ir vacio.','error');
+        else ctx.toast('No se pudo guardar.','error');
+      }catch(e){ ctx.toast('Error de conexion al guardar.','error'); }
       btn.disabled=false; btn.textContent='Guardar';
     };
   }
 
   async function anular(s){
-    if(!confirm('Anular la sucursal "'+s.nombre+'"? Se ocultara, pero el historico queda.')) return;
+    if(!(await ctx.confirm('Anular la sucursal "'+s.nombre+'"? Se ocultara, pero el historico queda.'))) return;
     try{
       const res = await ctx.rpc('rcd_sucursal_anular',{p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:s.id});
       const r = scalar(res);
-      if(r==='OK'){ cargar(); return; }
-      if(r==='MIN_UNA_ACTIVA') alert('No puedes anular: debe quedar al menos una sucursal activa.');
-      else if(r==='TIENE_MOVIMIENTOS') alert('No se puede anular: la sucursal tiene movimientos.');
-      else if(r==='SIN_PERMISO') alert('No tienes permiso para anular.');
-      else alert('No se pudo anular.');
-    }catch(e){ alert('Error de conexion.'); }
+      if(r==='OK'){ ctx.toast('Sucursal anulada'); cargar(); return; }
+      if(r==='MIN_UNA_ACTIVA') ctx.toast('No puedes anular: debe quedar al menos una sucursal activa.','error');
+      else if(r==='TIENE_MOVIMIENTOS') ctx.toast('No se puede anular: la sucursal tiene movimientos.','error');
+      else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso para anular.','error');
+      else ctx.toast('No se pudo anular.','error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
   cargar();
