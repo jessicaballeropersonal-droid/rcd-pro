@@ -24,8 +24,9 @@
   .wordmark b{color:var(--orange)}
   .field{margin-bottom:14px}
   .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
-  .field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff}
-  .field input:focus{outline:2px solid var(--esc);border-color:var(--esc)}
+  .field input,.field select{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;-webkit-appearance:none;appearance:none}
+  .field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236E7A77' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 13px center;padding-right:36px}
+  .field input:focus,.field select:focus{outline:2px solid var(--esc);border-color:var(--esc)}
   .enter{width:100%;background:var(--esc);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow';font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
   .enter:hover{background:var(--esc-d)}
   .enter:disabled{opacity:.6;cursor:default}
@@ -42,12 +43,14 @@
     <div class="top"></div>
     <div class="pad">
       <div class="brandbox"><div class="wordmark">RCD <b>Pro</b></div></div>
-      <div class="field"><label>Usuario</label><input id="usuario" autocomplete="username" placeholder="tu usuario"></div>
+      <div class="field"><label>Usuario</label>
+        <select id="usuario"><option value="">Cargando usuarios...</option></select>
+      </div>
       <div class="field"><label>Clave</label><input id="clave" type="password" autocomplete="current-password" placeholder="tu clave"></div>
       <button class="enter" id="btn" onclick="entrar()">Entrar</button>
       <div class="links"><a onclick="alert('La recuperacion de clave se habilita mas adelante. Por ahora pidela al administrador.')">Olvidaste tu clave?</a></div>
       <div class="err" id="err"></div>
-      <div class="hint">Cada usuario entra a su primer modulo permitido, segun sus permisos.</div>
+      <div class="hint">Elige tu usuario y escribe tu clave. Entras a tu primer modulo permitido.</div>
     </div>
   </div>
   <div class="pagenote">RCD Pro</div>
@@ -58,49 +61,61 @@
   const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltenhqdW5jYW50b2J4ZWZ0ZnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMzM0ODUsImV4cCI6MjA5MjgwOTQ4NX0.p1K6pvZy-Agb2J-mKF2MNR5ujrTfRjmvtTyP3QiIzu8";
 
   const $ = id => document.getElementById(id);
+  const headers = {
+    'Content-Type':'application/json',
+    'apikey': SUPABASE_ANON,
+    'Authorization':'Bearer ' + SUPABASE_ANON
+  };
+
+  // Cargar la lista de usuarios al abrir
+  async function cargarUsuarios(){
+    const sel = $('usuario');
+    try{
+      const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/rcd_usuarios_lista', {method:'POST', headers, body:'{}'});
+      const data = await r.json();
+      if(Array.isArray(data) && data.length){
+        sel.innerHTML = '<option value="">Selecciona tu usuario</option>' +
+          data.map(u => '<option value="'+u.usuario+'">'+u.nombre+'</option>').join('');
+      } else {
+        sel.innerHTML = '<option value="">No hay usuarios</option>';
+      }
+    }catch(e){
+      sel.innerHTML = '<option value="">No se pudo cargar</option>';
+    }
+  }
 
   async function entrar(){
-    const usuario = $('usuario').value.trim();
+    const usuario = $('usuario').value;
     const clave   = $('clave').value;
-    const err     = $('err');
-    err.classList.remove('show');
+    $('err').classList.remove('show');
 
-    if(!usuario || !clave){ showErr('Escribe tu usuario y tu clave.'); return; }
+    if(!usuario){ showErr('Selecciona tu usuario.'); return; }
+    if(!clave){ showErr('Escribe tu clave.'); return; }
 
     $('btn').disabled = true; $('btn').textContent = 'Entrando...';
-
     try{
       const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/rcd_login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON,
-          'Authorization': 'Bearer ' + SUPABASE_ANON
-        },
+        method:'POST', headers,
         body: JSON.stringify({ p_usuario: usuario, p_clave: clave })
       });
       const data = await r.json();
-
       if(Array.isArray(data) && data.length > 0){
-        // login correcto -> guardamos la sesion en memoria de la pestana
         sessionStorage.setItem('rcd_sesion', JSON.stringify(data[0]));
-        // por ahora avisamos; el panel lo armamos en el siguiente paso
         alert('Bienvenido, ' + data[0].nombre + ' (' + data[0].rol + ').\nLogin OK. El panel se arma en el siguiente paso.');
-        // window.location.href = 'panel.html';  // se activa cuando exista el panel
+        // window.location.href = 'panel.html';
       } else {
-        showErr('Usuario o clave incorrectos.');
+        showErr('Clave incorrecta.');
       }
     }catch(e){
-      showErr('No se pudo conectar. Revisa tu internet e intenta de nuevo.');
+      showErr('No se pudo conectar. Revisa tu internet.');
     }finally{
       $('btn').disabled = false; $('btn').textContent = 'Entrar';
     }
   }
 
   function showErr(msg){ const e=$('err'); e.textContent=msg; e.classList.add('show'); }
-
-  // Enter envia el formulario
   document.addEventListener('keydown', e=>{ if(e.key==='Enter') entrar(); });
+  cargarUsuarios();
 </script>
 </body>
 </html>
