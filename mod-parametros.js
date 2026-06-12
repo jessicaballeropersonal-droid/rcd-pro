@@ -1,0 +1,145 @@
+// ============================================================
+// RCD PRO · Modulo Parametros
+// Pestanas: Identidad (funcional) + el resto en construccion.
+// Se va llenando pestana por pestana en el Grupo 1.
+// ============================================================
+window.RCD_MODULOS = window.RCD_MODULOS || {};
+
+window.RCD_MODULOS.parametros = function(el, ctx){
+  const TABS = [
+    ['identidad','Identidad / marca'],
+    ['sucursales','Sucursales'],
+    ['productos','Productos terminados'],
+    ['densidades','Densidades'],
+    ['volquetas','Volquetas'],
+    ['municipios','Municipios'],
+    ['otros','Otros']
+  ];
+  let activa = 'identidad';
+
+  el.innerHTML =
+    '<div class="mcard" style="max-width:820px">'+
+      '<div class="tabbar" id="pTabs">'+
+        TABS.map(t=>'<button class="tab'+(t[0]===activa?' active':'')+'" data-t="'+t[0]+'">'+t[1]+'</button>').join('')+
+      '</div>'+
+      '<div id="pBody"></div>'+
+    '</div>';
+
+  el.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+    activa=b.dataset.t;
+    el.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
+    pintar();
+  });
+
+  function pintar(){
+    const body = el.querySelector('#pBody');
+    if(activa==='identidad'){ identidad(body, ctx); }
+    else {
+      body.innerHTML = '<div class="note">Esta seccion se construye en su paso del Grupo 1.</div>';
+    }
+  }
+  pintar();
+};
+
+// ---------- Pestana IDENTIDAD ----------
+async function identidad(body, ctx){
+  const puedeEditar = ctx.can('parametros','editar');
+  body.innerHTML = '<div class="loading">Cargando datos...</div>';
+
+  let g = {};
+  try{
+    const r = await ctx.rpc('rcd_gestor', {p_gestor_id: ctx.ses.gestor_id});
+    if(Array.isArray(r) && r.length) g = r[0];
+  }catch(e){}
+
+  let nuevoLogo = null; // data URL del logo nuevo, o null si no cambia
+
+  body.innerHTML =
+    '<h3 style="margin-top:0">Identidad / marca</h3>'+
+    '<p class="lead">El nombre, logo y datos de contacto del gestor. Aparecen en la cotizacion y en los documentos.</p>'+
+    '<div class="row2">'+
+      '<div>'+
+        '<div class="field"><label>Logo</label>'+
+          '<div style="display:flex;align-items:center;gap:12px">'+
+            '<div class="logo-box" id="logoBox">'+(g.logo_url?'<img src="'+g.logo_url+'">':'Sin logo')+'</div>'+
+            (puedeEditar?'<label class="btn ghost sm" style="margin:0">Subir logo<input type="file" id="logoFile" accept="image/*" hidden></label>':'')+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      '<div>'+
+        '<div class="field"><label>Nombre del gestor</label><input id="f_nombre" value="'+esc(g.nombre)+'" '+ro(puedeEditar)+'></div>'+
+        '<div class="field"><label>NIT</label><input id="f_nit" value="'+esc(g.nit)+'" '+ro(puedeEditar)+'></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="row2">'+
+      '<div class="field"><label>Telefono</label><input id="f_telefono" value="'+esc(g.telefono)+'" '+ro(puedeEditar)+'></div>'+
+      '<div class="field"><label>Correo</label><input id="f_correo" value="'+esc(g.correo)+'" '+ro(puedeEditar)+'></div>'+
+    '</div>'+
+    '<div class="field"><label>Direccion</label><input id="f_direccion" value="'+esc(g.direccion)+'" '+ro(puedeEditar)+'></div>'+
+    (puedeEditar
+      ? '<div style="display:flex;align-items:center;gap:14px;margin-top:8px"><button class="btn primary" id="btnGuardar">Guardar</button><span class="toast" id="okMsg"><span class="d"></span>Guardado</span></div>'
+      : '<div class="note warn">Solo lectura: no tienes permiso de Editar en Parametros.</div>');
+
+  if(puedeEditar){
+    const fileInput = body.querySelector('#logoFile');
+    if(fileInput){
+      fileInput.onchange = e=>{
+        const file = e.target.files[0];
+        if(!file) return;
+        comprimirLogo(file, dataUrl=>{
+          nuevoLogo = dataUrl;
+          body.querySelector('#logoBox').innerHTML = '<img src="'+dataUrl+'">';
+        });
+      };
+    }
+    body.querySelector('#btnGuardar').onclick = async function(){
+      const btn = this; btn.disabled = true; btn.textContent = 'Guardando...';
+      try{
+        const res = await ctx.rpc('rcd_gestor_guardar', {
+          p_usuario_id: ctx.ses.id,
+          p_gestor_id:  ctx.ses.gestor_id,
+          p_nombre:     v(body,'f_nombre'),
+          p_nit:        v(body,'f_nit'),
+          p_telefono:   v(body,'f_telefono'),
+          p_correo:     v(body,'f_correo'),
+          p_direccion:  v(body,'f_direccion'),
+          p_logo_url:   nuevoLogo
+        });
+        const ok = (res === 'OK' || (Array.isArray(res) && res[0]==='OK'));
+        if(ok){
+          nuevoLogo = null;
+          const t = body.querySelector('#okMsg'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2500);
+          // refresca el nombre del gestor en la barra lateral
+          const gn = document.getElementById('gestorNombre'); if(gn) gn.textContent = v(body,'f_nombre');
+        } else if(res === 'SIN_PERMISO'){
+          alert('No tienes permiso para editar la identidad.');
+        } else {
+          alert('No se pudo guardar. Intenta de nuevo.');
+        }
+      }catch(e){ alert('Error de conexion al guardar.'); }
+      finally{ btn.disabled = false; btn.textContent = 'Guardar'; }
+    };
+  }
+}
+
+// ---------- utilidades ----------
+function esc(s){ return (s==null?'':String(s)).replace(/"/g,'&quot;'); }
+function ro(puede){ return puede ? '' : 'readonly'; }
+function v(scope,id){ const e=scope.querySelector('#'+id); return e ? e.value.trim() : ''; }
+
+function comprimirLogo(file, cb){
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 320; let w = img.width, h = img.height;
+      if(w>h && w>max){ h = Math.round(h*max/w); w = max; }
+      else if(h>=w && h>max){ w = Math.round(w*max/h); h = max; }
+      const c = document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      cb(c.toDataURL('image/png')); // PNG conserva transparencia
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
