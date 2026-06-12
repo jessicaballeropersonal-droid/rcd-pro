@@ -101,8 +101,7 @@
       const data = await r.json();
       if(Array.isArray(data) && data.length > 0){
         sessionStorage.setItem('rcd_sesion', JSON.stringify(data[0]));
-        alert('Bienvenido, ' + data[0].nombre + ' (' + data[0].rol + ').\nLogin OK. El panel se arma en el siguiente paso.');
-        // window.location.href = 'panel.html';
+        window.location.href = 'panel.html';
       } else {
         showErr('Clave incorrecta.');
       }
