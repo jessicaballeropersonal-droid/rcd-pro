@@ -149,98 +149,151 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
-  // ===================== ORDENES (Paso B) =====================
+  // ===================== ORDENES (automaticas + partir manual + suelta) =====================
   function badgeOrden(e){
+    if(e==='pendiente') return '<span class="badge off">Pendiente</span>';
     if(e==='ofertada') return '<span class="badge warn">Ofertada</span>';
     if(e==='asignada') return '<span class="badge ok">Asignada</span>';
     if(e==='en_ruta') return '<span class="badge warn">En ruta</span>';
-    if(e==='completada') return '<span class="badge off">Completada</span>';
+    if(e==='completada') return '<span class="badge ok">Completada</span>';
+    if(e==='reemplazada') return '<span class="badge off">Reemplazada</span>';
     return '<span class="badge off">'+esc(e||'')+'</span>';
   }
   function msgOrden(r){
     return ({SIN_PERMISO:'No tienes permiso.', SOL_NO_APROBADA:'La solicitud no esta aprobada.',
+      SIN_TAMANO:'Define el tamano requerido en la solicitud (editala).',
+      YA_GENERADAS:'Las ordenes ya fueron generadas para esta solicitud.',
+      CAPACIDAD_INVALIDA:'El tamano no tiene una capacidad valida.',
       VEHICULO_VACIO:'Selecciona un vehiculo.', VEHICULO_INVALIDO:'Vehiculo invalido.',
       VEHICULO_INACTIVO:'El vehiculo esta inactivo.', DOCS_VENCIDOS:'El vehiculo tiene SOAT o tecnomecanica vencida.',
       VEHICULO_OCUPADO:'El vehiculo ya tiene una orden asignada (ocupado).',
-      TAMANO_NO_COINCIDE:'Ese vehiculo no es del tamano requerido. Marca "Excepcion" si quieres usarlo.'})[r] || 'No se pudo completar la accion.';
+      TAMANO_NO_COINCIDE:'El vehiculo no es del tamano de la orden. Usa "Partir" si quieres pasar a otro tamano.',
+      ORDEN_NO_ASIGNABLE:'Esa orden ya no se puede asignar.',
+      ORDEN_NO_OFERTABLE:'Solo se ofertan ordenes pendientes.',
+      ORDEN_NO_PARTIBLE:'Solo se parten ordenes pendientes u ofertadas (sin vehiculo).',
+      SIN_TAMANO_MITAD:'No existe un tamano que sea la mitad; no se puede partir.'})[r] || 'No se pudo completar la accion.';
   }
   function accionesOrden(o,i){
     let h='';
+    if(o.estado==='pendiente' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button><button class="btn ghost sm" data-oofe="'+i+'">Ofertar</button><button class="btn ghost sm" data-opar="'+i+'">Partir</button>';
+    if(o.estado==='ofertada' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button>';
     if(o.estado==='asignada' && pEditar) h+='<button class="btn ghost sm" data-oruta="'+i+'">En ruta</button>';
     if(o.estado==='en_ruta' && pEditar) h+='<button class="btn ghost sm" data-ocomp="'+i+'">Completar</button>';
-    if(o.estado!=='completada' && pEliminar) h+='<button class="btn ghost sm" data-oanu="'+i+'">Anular</button>';
-    return h || '<span class="mono" style="color:#C9C9C1;font-size:11px">esperando aceptacion</span>';
+    if(['pendiente','ofertada','asignada'].indexOf(o.estado)>=0 && pEliminar) h+='<button class="btn ghost sm" data-oanu="'+i+'">Anular</button>';
+    return h || '<span class="mono" style="color:#C9C9C1;font-size:11px">-</span>';
   }
 
   async function ordenes(s){
     el.innerHTML='<div class="loading">Cargando...</div>';
     let os=[]; try{ const r=await ctx.rpc('rcd_ordenes_lista',{p_solicitud_id:s.id}); os=Array.isArray(r)?r:[]; }catch(e){}
+    const sinTam = !s.tamano_id;
     el.innerHTML=
-      '<div class="mcard" style="max-width:900px">'+
+      '<div class="mcard" style="max-width:940px">'+
       '<button class="btn ghost sm" id="bBackL">&larr; Solicitudes</button>'+
       '<h3 style="margin:12px 0 2px">Ordenes de '+esc(s.numero||'')+'</h3>'+
-      '<p class="lead">'+esc(s.cliente||'')+' - '+esc(s.obra||'')+' · '+(s.tipo==='despacho'?'Despacho':'Recepcion')+' · declarado '+numEs(s.cantidad_declarada)+' t</p>'+
-      (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevaO">+ Nueva orden</button></div>':'')+
+      '<p class="lead">'+esc(s.cliente||'')+' - '+esc(s.obra||'')+' · '+(s.tipo==='despacho'?'Despacho':'Recepcion')+' · declarado '+numEs(s.cantidad_declarada)+' t · tamano '+esc(s.tamano||'cualquiera')+'</p>'+
+      (pCrear?'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
+        (os.length===0 ? '<button class="btn primary sm" id="bGen"'+(sinTam?' disabled':'')+'>Generar ordenes</button>' : '')+
+        '<button class="btn ghost sm" id="bAdd">+ Orden suelta</button>'+
+      '</div>':'')+
+      (sinTam?'<div class="note warn">Para generar ordenes automaticas, edita la solicitud y define un tamano requerido.</div>':'')+
       (os.length?
-        '<table class="mtable"><tr><th>N.º</th><th>Vehiculo</th><th>Volquetero</th><th>Fecha</th><th>Estado</th><th></th></tr>'+
-        os.map((o,i)=>'<tr><td class="mono"><b>'+esc(o.numero||'')+'</b></td>'+
-          '<td class="mono">'+(o.placa?esc(o.placa)+(o.tamano?' · '+esc(o.tamano):''):'<span style="color:var(--muted)">sin asignar</span>')+'</td>'+
+        '<table class="mtable"><tr><th>N.º</th><th>Tamano</th><th>Vehiculo</th><th>Volquetero</th><th>Estado</th><th></th></tr>'+
+        os.map(function(o,i){ return '<tr><td class="mono"><b>'+esc(o.numero||'')+'</b>'+(o.reemplaza_numero?'<br><span style="font-size:10px;color:var(--muted)">de '+esc(o.reemplaza_numero)+'</span>':'')+'</td>'+
+          '<td>'+esc(o.tamano||'')+'</td>'+
+          '<td class="mono">'+(o.placa?esc(o.placa):'<span style="color:var(--muted)">-</span>')+'</td>'+
           '<td>'+esc(o.volquetero||'')+'</td>'+
-          '<td class="mono">'+(o.fecha_programada?esc(o.fecha_programada):'-')+'</td>'+
           '<td>'+badgeOrden(o.estado)+'</td>'+
-          '<td><div class="rowbtns">'+accionesOrden(o,i)+'</div></td></tr>').join('')+'</table>'+
-        '<div class="note">"Ofertada" la aceptara un volquetero desde su portal (Grupo 6). El vehiculo se libera al pasar a "En ruta".</div>'
-        : '<div class="empty">Esta solicitud aun no tiene ordenes.</div>')+
+          '<td><div class="rowbtns">'+accionesOrden(o,i)+'</div></td></tr>'; }).join('')+'</table>'
+        : '<div class="empty">Sin ordenes. Acepta la solicitud y usa "Generar ordenes".</div>')+
+      '<div class="note">Cada orden es un viaje. Pendiente: Asignar (vehiculo del mismo tamano), Ofertar (la acepta un volquetero), o Partir (1 grande -> 2 de la mitad, lo autorizas tu). El vehiculo se libera al pasar a "En ruta".</div>'+
       '</div>';
     el.querySelector('#bBackL').onclick=lista;
-    if(pCrear){ const b=el.querySelector('#bNuevaO'); if(b) b.onclick=()=>formOrden(s); }
-    os.forEach((o,i)=>{
+    if(pCrear){
+      const g=el.querySelector('#bGen'); if(g && !sinTam) g.onclick=()=>generar(s);
+      const a=el.querySelector('#bAdd'); if(a) a.onclick=()=>agregarOrden(s);
+    }
+    os.forEach(function(o,i){
+      const asg=el.querySelector('[data-oasg="'+i+'"]'); if(asg) asg.onclick=()=>formAsignar(s,o);
+      const ofe=el.querySelector('[data-oofe="'+i+'"]'); if(ofe) ofe.onclick=()=>ordenOfertar(s,o);
+      const par=el.querySelector('[data-opar="'+i+'"]'); if(par) par.onclick=()=>ordenPartir(s,o);
       const ruta=el.querySelector('[data-oruta="'+i+'"]'); if(ruta) ruta.onclick=()=>ordenEstado(s,o,'en_ruta');
       const comp=el.querySelector('[data-ocomp="'+i+'"]'); if(comp) comp.onclick=()=>ordenEstado(s,o,'completada');
       const anu=el.querySelector('[data-oanu="'+i+'"]'); if(anu) anu.onclick=()=>ordenAnular(s,o);
     });
   }
 
-  async function formOrden(s){
-    let elig=[]; try{ const r=await ctx.rpc('rcd_vehiculos_elegibles',{p_gestor_id:ctx.ses.gestor_id}); elig=Array.isArray(r)?r:[]; }catch(e){}
-    const reqTam = s.tamano_id || '';
+  async function generar(s){
+    if(!(await ctx.confirm('Generar las ordenes de '+(s.numero||'')+' segun la cantidad declarada y el tamano requerido?'))) return;
+    try{ const r=scalar(await ctx.rpc('rcd_solicitud_generar_ordenes',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id}));
+      if(r && !isNaN(+r)){ ctx.toast('Se generaron '+r+' ordenes'); ordenes(s); return; }
+      ctx.toast(msgOrden(r),'error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  async function agregarOrden(s){
+    let tams=[]; try{ const r=await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); tams=(Array.isArray(r)?r:[]).filter(t=>t.activa); }catch(e){}
     el.innerHTML=
-      '<div class="mcard" style="max-width:640px">'+
-      '<button class="btn ghost sm" id="bBackO">&larr; Ordenes</button>'+
-      '<h3 style="margin:12px 0 6px">Nueva orden · '+esc(s.numero||'')+'</h3>'+
-      (reqTam?'<div class="note">Tamano requerido: <b>'+esc(s.tamano||'')+'</b>. En Oferta solo se ofrece a ese tamano; en Manual puedes elegir cualquiera.</div>':'<div class="note">Sin tamano requerido (cualquiera).</div>')+
-      '<div class="field"><label>Modo de asignacion</label><select id="o_modo">'+
-        '<option value="manual">Manual (asigno un vehiculo ahora)</option>'+
-        '<option value="oferta">Oferta (la acepta un volquetero desde su portal)</option>'+
-      '</select></div>'+
-      '<div class="field" id="o_vehwrap"><label>Vehiculo elegible</label><select id="o_veh"></select><div class="note warn" id="o_vehnote" style="display:none">No hay vehiculos elegibles.</div></div>'+
-      '<div class="field"><label>Fecha programada</label><input type="date" id="o_fecha"></div>'+
-      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancelO">Cancelar</button><button class="btn primary" id="bSaveO">Crear orden</button></div>'+
+      '<div class="mcard" style="max-width:520px">'+
+      '<button class="btn ghost sm" id="bBackAg">&larr; Ordenes</button>'+
+      '<h3 style="margin:12px 0 6px">Orden suelta · '+esc(s.numero||'')+'</h3>'+
+      '<div class="field"><label>Tamano del viaje</label><select id="ag_tam"><option value="">Selecciona...</option>'+
+        tams.map(t=>'<option value="'+t.id+'">'+esc(t.nombre)+'</option>').join('')+'</select></div>'+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancelAg">Cancelar</button><button class="btn primary" id="bSaveAg">Crear orden</button></div>'+
       '</div>';
-    const selModo=el.querySelector('#o_modo'), vehWrap=el.querySelector('#o_vehwrap'),
-          selVeh=el.querySelector('#o_veh'), vehNote=el.querySelector('#o_vehnote');
-
-    function pintarVeh(){
-      // Manual: el operador puede elegir cualquier vehiculo elegible (incluida la excepcion de tamano)
-      const arr=elig;
-      selVeh.innerHTML='<option value="">Selecciona...</option>'+arr.map(vh=>'<option value="'+vh.vehiculo_id+'">'+esc(vh.placa)+' · '+esc(vh.tamano||'')+' · '+esc(vh.volquetero||'')+'</option>').join('');
-      vehNote.style.display = arr.length?'none':'block';
-    }
-    function tg(){ vehWrap.style.display = selModo.value==='manual'?'':'none'; if(selModo.value==='manual') pintarVeh(); }
-    selModo.onchange=tg; tg();
-
-    el.querySelector('#bBackO').onclick=()=>ordenes(s);
-    el.querySelector('#bCancelO').onclick=()=>ordenes(s);
-    el.querySelector('#bSaveO').onclick=async function(){
-      const btn=this, modo=selModo.value, veh=selVeh.value;
-      if(modo==='manual' && !veh){ ctx.toast('Selecciona un vehiculo elegible.','error'); return; }
+    el.querySelector('#bBackAg').onclick=()=>ordenes(s);
+    el.querySelector('#bCancelAg').onclick=()=>ordenes(s);
+    el.querySelector('#bSaveAg').onclick=async function(){
+      const btn=this, tam=el.querySelector('#ag_tam').value;
+      if(!tam){ ctx.toast('Selecciona el tamano.','error'); return; }
       btn.disabled=true; btn.textContent='Creando...';
-      try{ const r=scalar(await ctx.rpc('rcd_orden_crear',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id,p_modo:modo,p_vehiculo_id:(modo==='manual'?veh:null),p_fecha:v(el,'o_fecha')||null,p_es_excepcion:false}));
-        if(r==='OK'){ ctx.toast('Orden creada'); ordenes(s); return; }
+      try{ const r=scalar(await ctx.rpc('rcd_orden_agregar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id,p_tamano_id:tam}));
+        if(r==='OK'){ ctx.toast('Orden agregada'); ordenes(s); return; }
         ctx.toast(msgOrden(r),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Crear orden';
     };
+  }
+
+  async function formAsignar(s,o){
+    let elig=[]; try{ const r=await ctx.rpc('rcd_vehiculos_elegibles',{p_gestor_id:ctx.ses.gestor_id}); elig=Array.isArray(r)?r:[]; }catch(e){}
+    const arr=elig.filter(vh=>vh.tamano_id===o.tamano_id);
+    el.innerHTML=
+      '<div class="mcard" style="max-width:560px">'+
+      '<button class="btn ghost sm" id="bBackAs">&larr; Ordenes</button>'+
+      '<h3 style="margin:12px 0 6px">Asignar · '+esc(o.numero||'')+' ('+esc(o.tamano||'')+')</h3>'+
+      '<div class="field"><label>Vehiculo elegible de '+esc(o.tamano||'')+'</label><select id="as_veh"><option value="">Selecciona...</option>'+
+        arr.map(vh=>'<option value="'+vh.vehiculo_id+'">'+esc(vh.placa)+' · '+esc(vh.volquetero||'')+'</option>').join('')+'</select>'+
+        (arr.length?'':'<div class="note warn">No hay vehiculos elegibles de ese tamano. Vuelve y usa "Partir" para pasar a un tamano menor.</div>')+'</div>'+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancelAs">Cancelar</button><button class="btn primary" id="bSaveAs">Asignar</button></div>'+
+      '</div>';
+    el.querySelector('#bBackAs').onclick=()=>ordenes(s);
+    el.querySelector('#bCancelAs').onclick=()=>ordenes(s);
+    el.querySelector('#bSaveAs').onclick=async function(){
+      const btn=this, veh=el.querySelector('#as_veh').value;
+      if(!veh){ ctx.toast('Selecciona un vehiculo.','error'); return; }
+      btn.disabled=true; btn.textContent='Asignando...';
+      try{ const r=scalar(await ctx.rpc('rcd_orden_asignar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_orden_id:o.id,p_vehiculo_id:veh}));
+        if(r==='OK'){ ctx.toast('Vehiculo asignado'); ordenes(s); return; }
+        ctx.toast(msgOrden(r),'error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Asignar';
+    };
+  }
+
+  async function ordenOfertar(s,o){
+    try{ const r=scalar(await ctx.rpc('rcd_orden_ofertar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_orden_id:o.id}));
+      if(r==='OK'){ ctx.toast('Orden ofertada'); ordenes(s); return; }
+      ctx.toast(msgOrden(r),'error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  async function ordenPartir(s,o){
+    if(!(await ctx.confirm('Partir la orden '+(o.numero||'')+' ('+(o.tamano||'')+') en 2 viajes de la mitad? Quedara la trazabilidad del cambio.'))) return;
+    try{ const r=scalar(await ctx.rpc('rcd_orden_partir',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_orden_id:o.id}));
+      if(r==='OK'){ ctx.toast('Orden partida en 2'); ordenes(s); return; }
+      ctx.toast(msgOrden(r),'error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
   async function ordenEstado(s,o,estado){
