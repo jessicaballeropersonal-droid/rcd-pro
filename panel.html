@@ -84,6 +84,8 @@
   .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:600;font-family:'JetBrains Mono',monospace}
   .badge.ok{background:var(--ok-soft);color:var(--ok)}
   .badge.off{background:#EEEEEA;color:var(--muted)}
+  .badge.warn{background:#FEF3C7;color:#B45309}
+  .badge.danger{background:#FEE2E2;color:#B91C1C}
   .rowbtns{display:flex;gap:6px;justify-content:flex-end}
   .empty{color:var(--muted);font-size:13px;padding:18px 4px;text-align:center}
   .cellnum{width:120px;text-align:right;border:1px solid var(--line);border-radius:7px;padding:7px 9px;font-family:'JetBrains Mono',monospace;font-size:13px}
@@ -139,6 +141,7 @@
 <!-- ===== MODULOS (cada uno en su archivo) ===== -->
 <script src="mod-parametros.js"></script>
 <script src="mod-clientes.js"></script>
+<script src="mod-volqueteros.js"></script>
 
 <script>
   const SUPABASE_URL  = "https://ymzxjuncantobxeftfqd.supabase.co";
