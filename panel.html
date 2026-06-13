@@ -90,6 +90,9 @@
   .empty{color:var(--muted);font-size:13px;padding:18px 4px;text-align:center}
   .cellnum{width:120px;text-align:right;border:1px solid var(--line);border-radius:7px;padding:7px 9px;font-family:'JetBrains Mono',monospace;font-size:13px}
   .cellnum:focus{outline:2px solid var(--esc);border-color:var(--esc)}
+  .chk{display:flex;align-items:flex-start;gap:9px;font-weight:400;margin:7px 0;cursor:pointer;line-height:1.35}
+  .chk input{width:17px;height:17px;margin:1px 0 0;flex:0 0 auto;accent-color:var(--esc)}
+  .chk span{flex:1}
   /* Avisos propios de la app */
   .rcdtoast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;transition:.22s;z-index:80;background:var(--esc-d);color:#fff;padding:12px 18px;border-radius:11px;font-size:13.5px;font-weight:600;box-shadow:0 10px 34px rgba(0,0,0,.22);max-width:90vw;text-align:center}
   .rcdtoast.show{opacity:1;transform:translateX(-50%) translateY(0)}
