@@ -36,6 +36,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
           '<td>'+badgeEstado(s.estado)+'</td>'+
           '<td><div class="rowbtns">'+
           (s.estado==='pendiente'&&pEditar?'<button class="btn ghost sm" data-aprob="'+i+'">Aprobar</button><button class="btn ghost sm" data-rech="'+i+'">Rechazar</button>':'')+
+          (s.estado==='aprobada'?'<button class="btn ghost sm" data-ord="'+i+'">Ordenes</button>':'')+
           (pEditar?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
           (pEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'')+
           '</div></td></tr>').join('')+'</table>'
@@ -46,6 +47,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     el.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anular(ss[i]);});
     el.querySelectorAll('[data-aprob]').forEach(b=>{const i=+b.dataset.aprob; b.onclick=()=>cambiarEstado(ss[i],'aprobada');});
     el.querySelectorAll('[data-rech]').forEach(b=>{const i=+b.dataset.rech; b.onclick=()=>cambiarEstado(ss[i],'rechazada');});
+    el.querySelectorAll('[data-ord]').forEach(b=>{const i=+b.dataset.ord; b.onclick=()=>ordenes(ss[i]);});
   }
 
   async function cambiarEstado(s, estado){
@@ -139,6 +141,105 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     try{ const r=scalar(await ctx.rpc('rcd_solicitud_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:s.id}));
       if(r==='OK'){ ctx.toast('Solicitud anulada'); lista(); return; }
       ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.','error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  // ===================== ORDENES (Paso B) =====================
+  function badgeOrden(e){
+    if(e==='ofertada') return '<span class="badge warn">Ofertada</span>';
+    if(e==='asignada') return '<span class="badge ok">Asignada</span>';
+    if(e==='en_ruta') return '<span class="badge warn">En ruta</span>';
+    if(e==='completada') return '<span class="badge off">Completada</span>';
+    return '<span class="badge off">'+esc(e||'')+'</span>';
+  }
+  function msgOrden(r){
+    return ({SIN_PERMISO:'No tienes permiso.', SOL_NO_APROBADA:'La solicitud no esta aprobada.',
+      VEHICULO_VACIO:'Selecciona un vehiculo.', VEHICULO_INVALIDO:'Vehiculo invalido.',
+      VEHICULO_INACTIVO:'El vehiculo esta inactivo.', DOCS_VENCIDOS:'El vehiculo tiene SOAT o tecnomecanica vencida.',
+      VEHICULO_OCUPADO:'El vehiculo ya tiene una orden asignada (ocupado).'})[r] || 'No se pudo completar la accion.';
+  }
+  function accionesOrden(o,i){
+    let h='';
+    if(o.estado==='asignada' && pEditar) h+='<button class="btn ghost sm" data-oruta="'+i+'">En ruta</button>';
+    if(o.estado==='en_ruta' && pEditar) h+='<button class="btn ghost sm" data-ocomp="'+i+'">Completar</button>';
+    if(o.estado!=='completada' && pEliminar) h+='<button class="btn ghost sm" data-oanu="'+i+'">Anular</button>';
+    return h || '<span class="mono" style="color:#C9C9C1;font-size:11px">esperando aceptacion</span>';
+  }
+
+  async function ordenes(s){
+    el.innerHTML='<div class="loading">Cargando...</div>';
+    let os=[]; try{ const r=await ctx.rpc('rcd_ordenes_lista',{p_solicitud_id:s.id}); os=Array.isArray(r)?r:[]; }catch(e){}
+    el.innerHTML=
+      '<div class="mcard" style="max-width:900px">'+
+      '<button class="btn ghost sm" id="bBackL">&larr; Solicitudes</button>'+
+      '<h3 style="margin:12px 0 2px">Ordenes de '+esc(s.numero||'')+'</h3>'+
+      '<p class="lead">'+esc(s.cliente||'')+' - '+esc(s.obra||'')+' · '+(s.tipo==='despacho'?'Despacho':'Recepcion')+' · declarado '+numEs(s.cantidad_declarada)+' t</p>'+
+      (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevaO">+ Nueva orden</button></div>':'')+
+      (os.length?
+        '<table class="mtable"><tr><th>N.º</th><th>Vehiculo</th><th>Volquetero</th><th>Fecha</th><th>Estado</th><th></th></tr>'+
+        os.map((o,i)=>'<tr><td class="mono"><b>'+esc(o.numero||'')+'</b></td>'+
+          '<td class="mono">'+(o.placa?esc(o.placa)+(o.tamano?' · '+esc(o.tamano):''):'<span style="color:var(--muted)">sin asignar</span>')+'</td>'+
+          '<td>'+esc(o.volquetero||'')+'</td>'+
+          '<td class="mono">'+(o.fecha_programada?esc(o.fecha_programada):'-')+'</td>'+
+          '<td>'+badgeOrden(o.estado)+'</td>'+
+          '<td><div class="rowbtns">'+accionesOrden(o,i)+'</div></td></tr>').join('')+'</table>'+
+        '<div class="note">"Ofertada" la aceptara un volquetero desde su portal (Grupo 6). El vehiculo se libera al pasar a "En ruta".</div>'
+        : '<div class="empty">Esta solicitud aun no tiene ordenes.</div>')+
+      '</div>';
+    el.querySelector('#bBackL').onclick=lista;
+    if(pCrear){ const b=el.querySelector('#bNuevaO'); if(b) b.onclick=()=>formOrden(s); }
+    os.forEach((o,i)=>{
+      const ruta=el.querySelector('[data-oruta="'+i+'"]'); if(ruta) ruta.onclick=()=>ordenEstado(s,o,'en_ruta');
+      const comp=el.querySelector('[data-ocomp="'+i+'"]'); if(comp) comp.onclick=()=>ordenEstado(s,o,'completada');
+      const anu=el.querySelector('[data-oanu="'+i+'"]'); if(anu) anu.onclick=()=>ordenAnular(s,o);
+    });
+  }
+
+  async function formOrden(s){
+    let elig=[]; try{ const r=await ctx.rpc('rcd_vehiculos_elegibles',{p_gestor_id:ctx.ses.gestor_id}); elig=Array.isArray(r)?r:[]; }catch(e){}
+    el.innerHTML=
+      '<div class="mcard" style="max-width:640px">'+
+      '<button class="btn ghost sm" id="bBackO">&larr; Ordenes</button>'+
+      '<h3 style="margin:12px 0 6px">Nueva orden · '+esc(s.numero||'')+'</h3>'+
+      '<div class="field"><label>Modo de asignacion</label><select id="o_modo">'+
+        '<option value="manual">Manual (asigno un vehiculo ahora)</option>'+
+        '<option value="oferta">Oferta (la acepta un volquetero desde su portal)</option>'+
+      '</select></div>'+
+      '<div class="field" id="o_vehwrap"><label>Vehiculo elegible</label><select id="o_veh"><option value="">Selecciona...</option>'+
+        elig.map(vh=>'<option value="'+vh.vehiculo_id+'">'+esc(vh.placa)+' · '+esc(vh.tamano||'')+' · '+esc(vh.volquetero||'')+'</option>').join('')+
+      '</select>'+(elig.length?'':'<div class="note warn">No hay vehiculos elegibles (activos, con documentos vigentes y libres).</div>')+'</div>'+
+      '<div class="field"><label>Fecha programada</label><input type="date" id="o_fecha"></div>'+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancelO">Cancelar</button><button class="btn primary" id="bSaveO">Crear orden</button></div>'+
+      '</div>';
+    const selModo=el.querySelector('#o_modo'), vehWrap=el.querySelector('#o_vehwrap');
+    function tg(){ vehWrap.style.display = selModo.value==='manual'?'':'none'; }
+    selModo.onchange=tg; tg();
+    el.querySelector('#bBackO').onclick=()=>ordenes(s);
+    el.querySelector('#bCancelO').onclick=()=>ordenes(s);
+    el.querySelector('#bSaveO').onclick=async function(){
+      const btn=this, modo=selModo.value, veh=el.querySelector('#o_veh').value;
+      if(modo==='manual' && !veh){ ctx.toast('Selecciona un vehiculo elegible.','error'); return; }
+      btn.disabled=true; btn.textContent='Creando...';
+      try{ const r=scalar(await ctx.rpc('rcd_orden_crear',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id,p_modo:modo,p_vehiculo_id:(modo==='manual'?veh:null),p_fecha:v(el,'o_fecha')||null}));
+        if(r==='OK'){ ctx.toast('Orden creada'); ordenes(s); return; }
+        ctx.toast(msgOrden(r),'error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Crear orden';
+    };
+  }
+
+  async function ordenEstado(s,o,estado){
+    try{ const r=scalar(await ctx.rpc('rcd_orden_estado',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_orden_id:o.id,p_estado:estado}));
+      if(r==='OK'){ ctx.toast(estado==='en_ruta'?'Orden en ruta':'Orden completada'); ordenes(s); return; }
+      ctx.toast(msgOrden(r),'error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  async function ordenAnular(s,o){
+    if(!(await ctx.confirm('Anular la orden '+(o.numero||'')+'?'))) return;
+    try{ const r=scalar(await ctx.rpc('rcd_orden_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_orden_id:o.id}));
+      if(r==='OK'){ ctx.toast('Orden anulada'); ordenes(s); return; }
+      ctx.toast(msgOrden(r),'error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
