@@ -7,7 +7,14 @@ window.RCD_MODULOS = window.RCD_MODULOS || {};
 window.RCD_MODULOS.solicitudes = function(el, ctx){
   const pCrear=ctx.can('solicitudes','escribir'), pEditar=ctx.can('solicitudes','editar'), pEliminar=ctx.can('solicitudes','eliminar');
   function badgeTipo(t){ return t==='despacho' ? '<span class="badge warn">Despacho</span>' : '<span class="badge ok">Recepcion</span>'; }
-  function badgeEstado(e){ return e==='cerrada'?'<span class="badge off">Cerrada</span>':'<span class="badge ok">Abierta</span>'; }
+  function badgeEstado(e){
+    if(e==='aprobada') return '<span class="badge ok">Aprobada</span>';
+    if(e==='pendiente') return '<span class="badge warn">Pendiente</span>';
+    if(e==='rechazada') return '<span class="badge danger">Rechazada</span>';
+    if(e==='cerrada') return '<span class="badge off">Cerrada</span>';
+    return '<span class="badge off">'+esc(e||'')+'</span>';
+  }
+  function badgeOrigen(o){ return o==='cliente' ? '<span class="badge warn">Cliente</span>' : '<span class="badge off">Operador</span>'; }
 
   async function lista(){
     el.innerHTML='<div class="loading">Cargando...</div>';
@@ -18,15 +25,17 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       '<p class="lead">Se crean sobre obras con cotizacion aceptada. Cada solicitud declara una cantidad (parcial del total de la obra).</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNueva">+ Nueva solicitud</button></div>':'')+
       (ss.length?
-        '<table class="mtable"><tr><th>N.º</th><th>Cliente / obra</th><th>Tipo</th><th>Detalle</th><th style="text-align:right">Declarado (t)</th><th>Fecha</th><th>Estado</th><th></th></tr>'+
+        '<table class="mtable"><tr><th>N.º</th><th>Cliente / obra</th><th>Tipo</th><th>Detalle</th><th style="text-align:right">Declarado (t)</th><th>Fecha</th><th>Origen</th><th>Estado</th><th></th></tr>'+
         ss.map((s,i)=>'<tr><td class="mono"><b>'+esc(s.numero||'')+'</b></td>'+
           '<td>'+esc(s.cliente||'')+'<br><span style="font-size:12px;color:var(--muted)">'+esc(s.obra||'')+'</span></td>'+
           '<td>'+badgeTipo(s.tipo)+'</td>'+
           '<td>'+(s.tipo==='despacho'?esc(s.producto||''):'RCD')+'</td>'+
           '<td style="text-align:right" class="mono">'+numEs(s.cantidad_declarada)+'</td>'+
           '<td class="mono">'+esc(s.fecha||'')+'</td>'+
+          '<td>'+badgeOrigen(s.origen)+'</td>'+
           '<td>'+badgeEstado(s.estado)+'</td>'+
           '<td><div class="rowbtns">'+
+          (s.estado==='pendiente'&&pEditar?'<button class="btn ghost sm" data-aprob="'+i+'">Aprobar</button><button class="btn ghost sm" data-rech="'+i+'">Rechazar</button>':'')+
           (pEditar?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
           (pEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'')+
           '</div></td></tr>').join('')+'</table>'
@@ -35,6 +44,17 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     if(pCrear) el.querySelector('#bNueva').onclick=()=>form(null,ss);
     el.querySelectorAll('[data-edit]').forEach(b=>{const i=+b.dataset.edit; b.onclick=()=>form(ss[i],ss);});
     el.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anular(ss[i]);});
+    el.querySelectorAll('[data-aprob]').forEach(b=>{const i=+b.dataset.aprob; b.onclick=()=>cambiarEstado(ss[i],'aprobada');});
+    el.querySelectorAll('[data-rech]').forEach(b=>{const i=+b.dataset.rech; b.onclick=()=>cambiarEstado(ss[i],'rechazada');});
+  }
+
+  async function cambiarEstado(s, estado){
+    const msg = estado==='aprobada' ? 'Aprobar la solicitud '+(s.numero||'')+'? Podra convertirse en ordenes.' : 'Rechazar la solicitud '+(s.numero||'')+'?';
+    if(!(await ctx.confirm(msg))) return;
+    try{ const r=scalar(await ctx.rpc('rcd_solicitud_estado',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:s.id,p_estado:estado}));
+      if(r==='OK'){ ctx.toast(estado==='aprobada'?'Solicitud aprobada':'Solicitud rechazada'); lista(); return; }
+      ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo cambiar el estado.','error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
   async function form(s, ss){
