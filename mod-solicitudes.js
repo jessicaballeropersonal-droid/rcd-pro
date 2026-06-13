@@ -184,7 +184,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       (os.length?
         '<table class="mtable"><tr><th>N.º</th><th>Vehiculo</th><th>Volquetero</th><th>Fecha</th><th>Estado</th><th></th></tr>'+
         os.map((o,i)=>'<tr><td class="mono"><b>'+esc(o.numero||'')+'</b></td>'+
-          '<td class="mono">'+(o.placa?esc(o.placa)+(o.tamano?' · '+esc(o.tamano):''):'<span style="color:var(--muted)">sin asignar</span>')+(o.es_excepcion?' <span class="badge warn">excepcion</span>':'')+'</td>'+
+          '<td class="mono">'+(o.placa?esc(o.placa)+(o.tamano?' · '+esc(o.tamano):''):'<span style="color:var(--muted)">sin asignar</span>')+'</td>'+
           '<td>'+esc(o.volquetero||'')+'</td>'+
           '<td class="mono">'+(o.fecha_programada?esc(o.fecha_programada):'-')+'</td>'+
           '<td>'+badgeOrden(o.estado)+'</td>'+
@@ -204,38 +204,30 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
   async function formOrden(s){
     let elig=[]; try{ const r=await ctx.rpc('rcd_vehiculos_elegibles',{p_gestor_id:ctx.ses.gestor_id}); elig=Array.isArray(r)?r:[]; }catch(e){}
     const reqTam = s.tamano_id || '';
-    let excepcion = false;
     el.innerHTML=
       '<div class="mcard" style="max-width:640px">'+
       '<button class="btn ghost sm" id="bBackO">&larr; Ordenes</button>'+
       '<h3 style="margin:12px 0 6px">Nueva orden · '+esc(s.numero||'')+'</h3>'+
-      (reqTam?'<div class="note">Tamano requerido: <b>'+esc(s.tamano||'')+'</b></div>':'<div class="note">Sin tamano requerido (cualquiera).</div>')+
+      (reqTam?'<div class="note">Tamano requerido: <b>'+esc(s.tamano||'')+'</b>. En Oferta solo se ofrece a ese tamano; en Manual puedes elegir cualquiera.</div>':'<div class="note">Sin tamano requerido (cualquiera).</div>')+
       '<div class="field"><label>Modo de asignacion</label><select id="o_modo">'+
         '<option value="manual">Manual (asigno un vehiculo ahora)</option>'+
         '<option value="oferta">Oferta (la acepta un volquetero desde su portal)</option>'+
       '</select></div>'+
-      (reqTam?'<label class="chk" id="o_excwrap"><input type="checkbox" id="o_exc"><span>Excepcion: usar otro tamano (no hay del requerido)</span></label>':'')+
-      '<div class="field" id="o_vehwrap"><label>Vehiculo elegible</label><select id="o_veh"></select><div class="note warn" id="o_vehnote" style="display:none">No hay vehiculos elegibles de ese tamano.</div></div>'+
+      '<div class="field" id="o_vehwrap"><label>Vehiculo elegible</label><select id="o_veh"></select><div class="note warn" id="o_vehnote" style="display:none">No hay vehiculos elegibles.</div></div>'+
       '<div class="field"><label>Fecha programada</label><input type="date" id="o_fecha"></div>'+
       '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancelO">Cancelar</button><button class="btn primary" id="bSaveO">Crear orden</button></div>'+
       '</div>';
     const selModo=el.querySelector('#o_modo'), vehWrap=el.querySelector('#o_vehwrap'),
-          selVeh=el.querySelector('#o_veh'), vehNote=el.querySelector('#o_vehnote'),
-          excChk=el.querySelector('#o_exc');
+          selVeh=el.querySelector('#o_veh'), vehNote=el.querySelector('#o_vehnote');
 
-    function listaFiltrada(){
-      if(!reqTam || excepcion) return elig;
-      return elig.filter(v=>v.tamano_id===reqTam);
-    }
     function pintarVeh(){
-      const arr=listaFiltrada();
+      // Manual: el operador puede elegir cualquier vehiculo elegible (incluida la excepcion de tamano)
+      const arr=elig;
       selVeh.innerHTML='<option value="">Selecciona...</option>'+arr.map(vh=>'<option value="'+vh.vehiculo_id+'">'+esc(vh.placa)+' · '+esc(vh.tamano||'')+' · '+esc(vh.volquetero||'')+'</option>').join('');
       vehNote.style.display = arr.length?'none':'block';
     }
     function tg(){ vehWrap.style.display = selModo.value==='manual'?'':'none'; if(selModo.value==='manual') pintarVeh(); }
-    selModo.onchange=tg;
-    if(excChk) excChk.onchange=()=>{ excepcion=excChk.checked; pintarVeh(); };
-    tg();
+    selModo.onchange=tg; tg();
 
     el.querySelector('#bBackO').onclick=()=>ordenes(s);
     el.querySelector('#bCancelO').onclick=()=>ordenes(s);
@@ -243,7 +235,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       const btn=this, modo=selModo.value, veh=selVeh.value;
       if(modo==='manual' && !veh){ ctx.toast('Selecciona un vehiculo elegible.','error'); return; }
       btn.disabled=true; btn.textContent='Creando...';
-      try{ const r=scalar(await ctx.rpc('rcd_orden_crear',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id,p_modo:modo,p_vehiculo_id:(modo==='manual'?veh:null),p_fecha:v(el,'o_fecha')||null,p_es_excepcion:excepcion}));
+      try{ const r=scalar(await ctx.rpc('rcd_orden_crear',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id,p_modo:modo,p_vehiculo_id:(modo==='manual'?veh:null),p_fecha:v(el,'o_fecha')||null,p_es_excepcion:false}));
         if(r==='OK'){ ctx.toast('Orden creada'); ordenes(s); return; }
         ctx.toast(msgOrden(r),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
