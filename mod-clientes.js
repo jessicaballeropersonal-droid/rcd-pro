@@ -141,6 +141,7 @@ window.RCD_MODULOS.clientes = function(el, ctx){
         '</select></div>'+
         '<div class="field"><label>N.º generador (opcional)</label><input id="o_numgen" value="'+(nuevo?'':esc(o.numero_generador||''))+'" placeholder="en tramite"></div>'+
       '</div>'+
+      '<div class="field"><label>Total a disponer (t)</label><input id="o_total" class="cellnum" style="width:160px" value="'+(nuevo?'':numEs(o.total_declarado_t))+'"><div class="note">Total de toneladas declaradas para esta obra. Las solicitudes se vigilan contra este total.</div></div>'+
       '<div class="note" id="o_metanote" style="display:none"></div>'+
       '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bC">Cancelar</button><button class="btn primary" id="bS">Guardar</button></div>';
 
@@ -174,7 +175,8 @@ window.RCD_MODULOS.clientes = function(el, ctx){
       try{ const r=scalar(await ctx.rpc('rcd_obra_guardar',{
           p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:nuevo?null:o.id, p_cliente_id:c.id,
           p_nombre:nombre, p_municipio_id:selMun.value, p_comuna_id:selCom.value||null, p_direccion:v(cont,'o_dir'),
-          p_area:parseNum(v(cont,'o_area')), p_forma_pago:cont.querySelector('#o_pago').value, p_numero_generador:v(cont,'o_numgen')}));
+          p_area:parseNum(v(cont,'o_area')), p_forma_pago:cont.querySelector('#o_pago').value, p_numero_generador:v(cont,'o_numgen'),
+          p_total_declarado:parseNum(v(cont,'o_total'))}));
         if(r==='OK'){ ctx.toast('Obra guardada'); obras(c); return; }
         ctx.toast(r==='MUNICIPIO_VACIO'?'Selecciona el municipio.':(r==='FORMA_PAGO_INVALIDA'?'Elige la forma de pago.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.')),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
