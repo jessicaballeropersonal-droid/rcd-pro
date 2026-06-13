@@ -423,8 +423,9 @@ async function municipios(body, ctx){
       '<p class="lead">Cada municipio tiene sus metas de aprovechamiento y sus comunas. Las tarifas de transporte van en el siguiente paso.</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Agregar municipio</button></div>':'')+
       (lista.length?
-        '<table class="mtable"><tr><th>Municipio</th><th>Comunas</th><th>Estado</th><th></th></tr>'+
+        '<table class="mtable"><tr><th>Municipio</th><th>Comunas</th><th style="text-align:right">Meta vigente</th><th>Estado</th><th></th></tr>'+
         lista.map((m,i)=>'<tr><td><b>'+esc(m.nombre)+'</b></td><td class="mono">'+m.n_comunas+'</td>'+
+          '<td style="text-align:right" class="mono">'+(m.meta_vigente==null?'<span style="color:#C9C9C1">sin meta</span>':numEs(m.meta_vigente)+'%')+'</td>'+
           '<td><span class="badge '+(m.activo?'ok':'off')+'">'+(m.activo?'Activo':'Inactivo')+'</span></td>'+
           '<td><div class="rowbtns"><button class="btn ghost sm" data-open="'+i+'">Gestionar</button>'+
           (pEditar?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
@@ -580,6 +581,54 @@ async function municipios(body, ctx){
       if(r==='OK'){ ctx.toast('Comuna anulada'); comunas(m); return; }
       ctx.toast(r==='TIENE_OBRAS'?'No se puede anular: tiene obras asociadas.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.'),'error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  // ----- TARIFAS (por comuna x tamano) -----
+  async function tarifasComuna(m, c){
+    const cont=body.querySelector('#secComunas');
+    const puedeGuardar = pEditar || pCrear;
+    cont.innerHTML='<div class="loading">Cargando tarifas...</div>';
+    let lista=[]; try{ const r=await ctx.rpc('rcd_tarifas_comuna',{p_gestor_id:ctx.ses.gestor_id, p_comuna_id:c.id}); if(Array.isArray(r)) lista=r; }catch(e){}
+
+    if(!lista.length){
+      cont.innerHTML='<button class="btn ghost sm" id="bBackT">&larr; Comunas</button>'+
+        '<h4 style="margin:12px 0 6px">Tarifas - '+esc(c.nombre)+'</h4>'+
+        '<div class="note warn">Primero crea tamanos de volqueta en la pestana Volquetas.</div>';
+      cont.querySelector('#bBackT').onclick=()=>comunas(m); return;
+    }
+
+    cont.innerHTML=
+      '<button class="btn ghost sm" id="bBackT">&larr; Comunas</button>'+
+      '<h4 style="margin:12px 0 2px">Tarifas de transporte - '+esc(c.nombre)+'</h4>'+
+      '<p class="lead">Cobro a la constructora y pago al volquetero, por tamano. El margen es informativo (cobro - pago).</p>'+
+      '<table class="mtable"><tr><th>Tamano</th><th style="text-align:right">Cobro</th><th style="text-align:right">Pago</th><th style="text-align:right">Margen</th></tr>'+
+      lista.map(t=>'<tr data-vq="'+t.volqueta_id+'">'+
+        '<td><b>'+esc(t.volqueta_nombre)+'</b></td>'+
+        '<td style="text-align:right"><input class="cellnum t_cobro" value="'+numEs(t.cobro)+'" '+(puedeGuardar?'':'readonly')+'></td>'+
+        '<td style="text-align:right"><input class="cellnum t_pago" value="'+numEs(t.pago)+'" '+(puedeGuardar?'':'readonly')+'></td>'+
+        '<td style="text-align:right" class="mono t_margen">'+numEs(t.cobro - t.pago)+'</td></tr>').join('')+
+      '</table>'+
+      (puedeGuardar?'<div style="margin-top:14px;text-align:right"><button class="btn primary" id="bSaveT">Guardar tarifas</button></div>':'<div class="note warn">Solo lectura: no tienes permiso para editar tarifas.</div>');
+
+    cont.querySelector('#bBackT').onclick=()=>comunas(m);
+    cont.querySelectorAll('tr[data-vq]').forEach(tr=>{
+      const recalc=()=>{ const co=parseNum(tr.querySelector('.t_cobro').value), pa=parseNum(tr.querySelector('.t_pago').value); tr.querySelector('.t_margen').textContent=numEs(co-pa); };
+      tr.querySelector('.t_cobro').addEventListener('input',recalc);
+      tr.querySelector('.t_pago').addEventListener('input',recalc);
+    });
+    if(puedeGuardar){
+      cont.querySelector('#bSaveT').onclick=async function(){
+        const btn=this; btn.disabled=true; btn.textContent='Guardando...';
+        const datos=Array.from(cont.querySelectorAll('tr[data-vq]')).map(tr=>({
+          volqueta_id:tr.dataset.vq, cobro:parseNum(tr.querySelector('.t_cobro').value), pago:parseNum(tr.querySelector('.t_pago').value)
+        }));
+        try{ const r=scalar(await ctx.rpc('rcd_tarifas_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_comuna_id:c.id,p_datos:datos}));
+          if(r==='OK') ctx.toast('Tarifas guardadas');
+          else ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.','error');
+        }catch(e){ ctx.toast('Error de conexion.','error'); }
+        btn.disabled=false; btn.textContent='Guardar tarifas';
+      };
+    }
   }
 
   listaMun();
