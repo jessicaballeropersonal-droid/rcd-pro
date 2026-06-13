@@ -63,6 +63,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     const nuevo=!s;
     let obras=[]; try{ const r=await ctx.rpc('rcd_obras_cotizadas',{p_gestor_id:ctx.ses.gestor_id}); obras=Array.isArray(r)?r:[]; }catch(e){}
     let productos=[]; try{ const r=await ctx.rpc('rcd_productos_lista',{p_gestor_id:ctx.ses.gestor_id}); productos=(Array.isArray(r)?r:[]).filter(p=>p.activo); }catch(e){}
+    let tams=[]; try{ const r=await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); tams=(Array.isArray(r)?r:[]).filter(t=>t.activa); }catch(e){}
 
     // si edito, necesito el obra_id; lo obtengo emparejando por nombre no es fiable -> guardo obra_id en la solicitud lista? no viene.
     // Para editar, recargamos por el id de solicitud via lista (ya trae lo necesario salvo obra_id). Pedimos obra por selector.
@@ -87,6 +88,9 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
         productos.map(p=>'<option value="'+p.id+'">'+esc(p.nombre)+'</option>').join('')+
       '</select></div>'+
       '<div class="field"><label>Cantidad declarada (t)</label><input id="s_cant" class="cellnum" style="width:160px" value="'+(nuevo?'':numEs(s.cantidad_declarada))+'"></div>'+
+      '<div class="field"><label>Tamano requerido (opcional)</label><select id="s_tam"><option value="">Cualquiera</option>'+
+        tams.map(t=>'<option value="'+t.id+'"'+(!nuevo&&s.tamano_id===t.id?' selected':'')+'>'+esc(t.nombre)+'</option>').join('')+
+      '</select><div class="note">Si lo defines, las ordenes solo aceptaran vehiculos de ese tamano (salvo excepcion).</div></div>'+
       '<div class="field"><label>Observaciones</label><input id="s_obs" value="'+(nuevo?'':esc(s.observaciones||''))+'"></div>'+
       '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>'+
       '</div>';
@@ -128,7 +132,8 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       try{ const r=scalar(await ctx.rpc('rcd_solicitud_guardar',{
           p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:nuevo?null:s.id,
           p_obra_id:selObra.value, p_tipo:tipo, p_producto_id:(tipo==='despacho'?selProd.value:null),
-          p_cantidad:parseNum(inpCant.value), p_fecha:v(el,'s_fecha')||null, p_observaciones:v(el,'s_obs')}));
+          p_cantidad:parseNum(inpCant.value), p_fecha:v(el,'s_fecha')||null, p_observaciones:v(el,'s_obs'),
+          p_tamano_id:el.querySelector('#s_tam').value||null}));
         if(r==='OK'){ ctx.toast('Solicitud guardada'); lista(); return; }
         ctx.toast(r==='OBRA_NO_COTIZADA'?'Esa obra no tiene cotizacion aceptada.':(r==='PRODUCTO_VACIO'?'Selecciona el producto.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.')),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
@@ -156,7 +161,8 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     return ({SIN_PERMISO:'No tienes permiso.', SOL_NO_APROBADA:'La solicitud no esta aprobada.',
       VEHICULO_VACIO:'Selecciona un vehiculo.', VEHICULO_INVALIDO:'Vehiculo invalido.',
       VEHICULO_INACTIVO:'El vehiculo esta inactivo.', DOCS_VENCIDOS:'El vehiculo tiene SOAT o tecnomecanica vencida.',
-      VEHICULO_OCUPADO:'El vehiculo ya tiene una orden asignada (ocupado).'})[r] || 'No se pudo completar la accion.';
+      VEHICULO_OCUPADO:'El vehiculo ya tiene una orden asignada (ocupado).',
+      TAMANO_NO_COINCIDE:'Ese vehiculo no es del tamano requerido. Marca "Excepcion" si quieres usarlo.'})[r] || 'No se pudo completar la accion.';
   }
   function accionesOrden(o,i){
     let h='';
@@ -178,7 +184,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       (os.length?
         '<table class="mtable"><tr><th>N.º</th><th>Vehiculo</th><th>Volquetero</th><th>Fecha</th><th>Estado</th><th></th></tr>'+
         os.map((o,i)=>'<tr><td class="mono"><b>'+esc(o.numero||'')+'</b></td>'+
-          '<td class="mono">'+(o.placa?esc(o.placa)+(o.tamano?' · '+esc(o.tamano):''):'<span style="color:var(--muted)">sin asignar</span>')+'</td>'+
+          '<td class="mono">'+(o.placa?esc(o.placa)+(o.tamano?' · '+esc(o.tamano):''):'<span style="color:var(--muted)">sin asignar</span>')+(o.es_excepcion?' <span class="badge warn">excepcion</span>':'')+'</td>'+
           '<td>'+esc(o.volquetero||'')+'</td>'+
           '<td class="mono">'+(o.fecha_programada?esc(o.fecha_programada):'-')+'</td>'+
           '<td>'+badgeOrden(o.estado)+'</td>'+
@@ -197,30 +203,47 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
 
   async function formOrden(s){
     let elig=[]; try{ const r=await ctx.rpc('rcd_vehiculos_elegibles',{p_gestor_id:ctx.ses.gestor_id}); elig=Array.isArray(r)?r:[]; }catch(e){}
+    const reqTam = s.tamano_id || '';
+    let excepcion = false;
     el.innerHTML=
       '<div class="mcard" style="max-width:640px">'+
       '<button class="btn ghost sm" id="bBackO">&larr; Ordenes</button>'+
       '<h3 style="margin:12px 0 6px">Nueva orden · '+esc(s.numero||'')+'</h3>'+
+      (reqTam?'<div class="note">Tamano requerido: <b>'+esc(s.tamano||'')+'</b></div>':'<div class="note">Sin tamano requerido (cualquiera).</div>')+
       '<div class="field"><label>Modo de asignacion</label><select id="o_modo">'+
         '<option value="manual">Manual (asigno un vehiculo ahora)</option>'+
         '<option value="oferta">Oferta (la acepta un volquetero desde su portal)</option>'+
       '</select></div>'+
-      '<div class="field" id="o_vehwrap"><label>Vehiculo elegible</label><select id="o_veh"><option value="">Selecciona...</option>'+
-        elig.map(vh=>'<option value="'+vh.vehiculo_id+'">'+esc(vh.placa)+' · '+esc(vh.tamano||'')+' · '+esc(vh.volquetero||'')+'</option>').join('')+
-      '</select>'+(elig.length?'':'<div class="note warn">No hay vehiculos elegibles (activos, con documentos vigentes y libres).</div>')+'</div>'+
+      (reqTam?'<label class="chk" id="o_excwrap"><input type="checkbox" id="o_exc"><span>Excepcion: usar otro tamano (no hay del requerido)</span></label>':'')+
+      '<div class="field" id="o_vehwrap"><label>Vehiculo elegible</label><select id="o_veh"></select><div class="note warn" id="o_vehnote" style="display:none">No hay vehiculos elegibles de ese tamano.</div></div>'+
       '<div class="field"><label>Fecha programada</label><input type="date" id="o_fecha"></div>'+
       '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancelO">Cancelar</button><button class="btn primary" id="bSaveO">Crear orden</button></div>'+
       '</div>';
-    const selModo=el.querySelector('#o_modo'), vehWrap=el.querySelector('#o_vehwrap');
-    function tg(){ vehWrap.style.display = selModo.value==='manual'?'':'none'; }
-    selModo.onchange=tg; tg();
+    const selModo=el.querySelector('#o_modo'), vehWrap=el.querySelector('#o_vehwrap'),
+          selVeh=el.querySelector('#o_veh'), vehNote=el.querySelector('#o_vehnote'),
+          excChk=el.querySelector('#o_exc');
+
+    function listaFiltrada(){
+      if(!reqTam || excepcion) return elig;
+      return elig.filter(v=>v.tamano_id===reqTam);
+    }
+    function pintarVeh(){
+      const arr=listaFiltrada();
+      selVeh.innerHTML='<option value="">Selecciona...</option>'+arr.map(vh=>'<option value="'+vh.vehiculo_id+'">'+esc(vh.placa)+' · '+esc(vh.tamano||'')+' · '+esc(vh.volquetero||'')+'</option>').join('');
+      vehNote.style.display = arr.length?'none':'block';
+    }
+    function tg(){ vehWrap.style.display = selModo.value==='manual'?'':'none'; if(selModo.value==='manual') pintarVeh(); }
+    selModo.onchange=tg;
+    if(excChk) excChk.onchange=()=>{ excepcion=excChk.checked; pintarVeh(); };
+    tg();
+
     el.querySelector('#bBackO').onclick=()=>ordenes(s);
     el.querySelector('#bCancelO').onclick=()=>ordenes(s);
     el.querySelector('#bSaveO').onclick=async function(){
-      const btn=this, modo=selModo.value, veh=el.querySelector('#o_veh').value;
+      const btn=this, modo=selModo.value, veh=selVeh.value;
       if(modo==='manual' && !veh){ ctx.toast('Selecciona un vehiculo elegible.','error'); return; }
       btn.disabled=true; btn.textContent='Creando...';
-      try{ const r=scalar(await ctx.rpc('rcd_orden_crear',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id,p_modo:modo,p_vehiculo_id:(modo==='manual'?veh:null),p_fecha:v(el,'o_fecha')||null}));
+      try{ const r=scalar(await ctx.rpc('rcd_orden_crear',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id,p_modo:modo,p_vehiculo_id:(modo==='manual'?veh:null),p_fecha:v(el,'o_fecha')||null,p_es_excepcion:excepcion}));
         if(r==='OK'){ ctx.toast('Orden creada'); ordenes(s); return; }
         ctx.toast(msgOrden(r),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
