@@ -50,7 +50,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   // ===================== EDITOR =====================
   async function abrirEditor(cotId){
     const st={ id:null, numero:'', cliente_id:'', obra_id:'', obra:'', comuna_id:'', fecha:'', valida_hasta:'',
-               observaciones:'', estado:'borrador', lineas:[], productos:[], tarifas:[], precioDisp:0, clientes:[], obrasOpts:[] };
+               observaciones:'', estado:'borrador', lineas:[], productos:[], tarifas:[], precioDisp:0, precioGen:0, clientes:[], obrasOpts:[] };
     try{ const r=await ctx.rpc('rcd_clientes_lista',{p_gestor_id:ctx.ses.gestor_id}); st.clientes=Array.isArray(r)?r:[]; }catch(e){}
 
     if(cotId){
@@ -71,6 +71,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   async function cargarContexto(st){
     try{ const r=await ctx.rpc('rcd_productos_lista',{p_gestor_id:ctx.ses.gestor_id}); st.productos=(Array.isArray(r)?r:[]).filter(p=>p.activo); }catch(e){ st.productos=[]; }
     try{ const r=await ctx.rpc('rcd_precio_disposicion',{p_gestor_id:ctx.ses.gestor_id}); st.precioDisp=parseNum(scalar(r)); }catch(e){ st.precioDisp=0; }
+    try{ const r=await ctx.rpc('rcd_precio_generacion',{p_gestor_id:ctx.ses.gestor_id}); st.precioGen=parseNum(scalar(r)); }catch(e){ st.precioGen=0; }
     if(st.comuna_id){ try{ const r=await ctx.rpc('rcd_tarifas_comuna',{p_gestor_id:ctx.ses.gestor_id,p_comuna_id:st.comuna_id}); st.tarifas=Array.isArray(r)?r:[]; }catch(e){ st.tarifas=[]; } }
     else st.tarifas=[];
   }
@@ -143,6 +144,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   function cambiarTipo(st,i,tipo){
     const l=st.lineas[i]; l.tipo=tipo; l.producto_id=''; l.tamano_id='';
     if(tipo==='disposicion'){ l.descripcion='Disposicion de escombros'; l.precio_unit=st.precioDisp; l.aplica_iva=true; }
+    else if(tipo==='generacion'){ l.descripcion='Generacion de escombros'; l.precio_unit=st.precioGen; l.aplica_iva=true; }
     else if(tipo==='transporte'){ l.descripcion='Transporte'; l.precio_unit=0; l.aplica_iva=false; }
     else { l.descripcion=''; l.precio_unit=0; l.aplica_iva=true; }
   }
@@ -160,6 +162,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   function filaLinea(l,i,st,dis){
     let detalle='';
     if(l.tipo==='disposicion') detalle='Disposicion de escombros';
+    else if(l.tipo==='generacion') detalle='Generacion de escombros';
     else if(l.tipo==='transporte'){
       detalle = dis ? esc(l.descripcion||'Transporte')
         : '<select data-det="'+i+'"><option value="">Tamano...</option>'+st.tarifas.map(t=>'<option value="'+t.volqueta_id+'"'+(l.tamano_id===t.volqueta_id?' selected':'')+'>'+esc(t.volqueta_nombre)+'</option>').join('')+'</select>';
@@ -167,9 +170,10 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
       detalle = dis ? esc(l.descripcion||'')
         : '<select data-det="'+i+'"><option value="">Producto...</option>'+st.productos.map(p=>'<option value="'+p.id+'"'+(l.producto_id===p.id?' selected':'')+'>'+esc(p.nombre)+'</option>').join('')+'</select>';
     }
-    const tipoSel = dis ? ({disposicion:'Disposicion',transporte:'Transporte',producto:'Producto'}[l.tipo]||l.tipo)
+    const tipoSel = dis ? ({disposicion:'Disposicion',generacion:'Generacion',transporte:'Transporte',producto:'Producto'}[l.tipo]||l.tipo)
       : '<select data-tipo="'+i+'">'+
         '<option value="disposicion"'+(l.tipo==='disposicion'?' selected':'')+'>Disposicion</option>'+
+        '<option value="generacion"'+(l.tipo==='generacion'?' selected':'')+'>Generacion</option>'+
         '<option value="transporte"'+(l.tipo==='transporte'?' selected':'')+'>Transporte</option>'+
         '<option value="producto"'+(l.tipo==='producto'?' selected':'')+'>Producto</option></select>';
     const cant = dis ? numEs(l.cantidad) : '<input class="cellnum" data-cant="'+i+'" value="'+numEs(l.cantidad)+'" style="width:90px">';
