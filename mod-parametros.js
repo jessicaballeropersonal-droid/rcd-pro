@@ -36,6 +36,8 @@ window.RCD_MODULOS.parametros = function(el, ctx){
     if(activa==='identidad'){ identidad(body, ctx); }
     else if(activa==='sucursales'){ sucursales(body, ctx); }
     else if(activa==='productos'){ productos(body, ctx); }
+    else if(activa==='densidades'){ densidades(body, ctx); }
+    else if(activa==='volquetas'){ volquetas(body, ctx); }
     else {
       body.innerHTML = '<div class="note">Esta seccion se construye en su paso del Grupo 1.</div>';
     }
@@ -284,7 +286,132 @@ async function productos(body, ctx){
   cargar();
 }
 
+// ---------- Pestana DENSIDADES ----------
+async function densidades(body, ctx){
+  const puedeEditar = ctx.can('parametros','editar');
+  body.innerHTML = '<div class="loading">Cargando...</div>';
+  let lista=[];
+  try{ const r = await ctx.rpc('rcd_densidades_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
+
+  body.innerHTML =
+    '<h3 style="margin-top:0">Densidades por tipo de RCD</h3>'+
+    '<p class="lead">Solo se usan en la opcion 2 del pesaje (por volumen): m3 x densidad = toneladas.</p>'+
+    '<table class="mtable"><tr><th>Tipo de RCD</th><th style="text-align:right">Densidad (t/m3)</th></tr>'+
+    lista.map(d=>'<tr><td>'+esc(d.tipo)+'</td><td style="text-align:right">'+
+      '<input class="cellnum dens" data-id="'+d.id+'" value="'+numEs(d.densidad)+'" '+(puedeEditar?'':'readonly')+'></td></tr>').join('')+
+    '</table>'+
+    '<div class="note">Si la volqueta pasa por bascula (opcion 1), la densidad no se usa: el peso es el real.</div>'+
+    (puedeEditar
+      ? '<div style="margin-top:14px;text-align:right"><button class="btn primary" id="bSave">Guardar</button></div>'
+      : '<div class="note warn">Solo lectura: no tienes permiso de Editar en Parametros.</div>');
+
+  if(puedeEditar){
+    body.querySelector('#bSave').onclick = async function(){
+      const btn=this; btn.disabled=true; btn.textContent='Guardando...';
+      const datos = Array.from(body.querySelectorAll('.dens')).map(i=>({id:i.dataset.id, densidad:parseNum(i.value)}));
+      try{
+        const res = await ctx.rpc('rcd_densidades_guardar',{p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_datos:datos});
+        const r = scalar(res);
+        if(r==='OK') ctx.toast('Densidades guardadas');
+        else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso.','error');
+        else ctx.toast('No se pudo guardar.','error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Guardar';
+    };
+  }
+}
+
+// ---------- Pestana VOLQUETAS ----------
+async function volquetas(body, ctx){
+  const puedeCrear    = ctx.can('parametros','escribir');
+  const puedeEditar   = ctx.can('parametros','editar');
+  const puedeEliminar = ctx.can('parametros','eliminar');
+
+  async function cargar(){
+    body.innerHTML = '<div class="loading">Cargando...</div>';
+    let lista=[];
+    try{ const r = await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
+    render(lista);
+  }
+
+  function render(lista){
+    body.innerHTML =
+      '<h3 style="margin-top:0">Tamanos de volqueta</h3>'+
+      '<p class="lead">Capacidad y minimo en toneladas. La capacidad calcula los viajes; el minimo es lo que reserva el cupo por viaje.</p>'+
+      (puedeCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="btnNueva">+ Agregar tamano</button></div>':'')+
+      (lista.length? tabla(lista) : '<div class="empty">Aun no hay tamanos.</div>')+
+      '<div class="note">Viajes = toneladas / capacidad (redondeo hacia arriba). El minimo por viaje es lo que reserva el cupo.</div>';
+    if(puedeCrear) body.querySelector('#btnNueva').onclick=()=>form(null);
+    body.querySelectorAll('[data-edit]').forEach(b=>{ const i=+b.dataset.edit; b.onclick=()=>form(lista[i]); });
+    body.querySelectorAll('[data-anular]').forEach(b=>{ const i=+b.dataset.anular; b.onclick=()=>anular(lista[i]); });
+  }
+
+  function tabla(lista){
+    return '<table class="mtable"><tr><th>Tamano</th><th style="text-align:right">Capacidad (t)</th><th style="text-align:right">Minimo (t)</th><th>Estado</th><th></th></tr>'+
+      lista.map((vq,i)=>{
+        const acts =
+          (puedeEditar  ?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
+          (puedeEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'');
+        return '<tr><td><b>'+esc(vq.nombre)+'</b></td>'+
+          '<td style="text-align:right" class="mono">'+numEs(vq.capacidad_t)+'</td>'+
+          '<td style="text-align:right" class="mono">'+numEs(vq.minimo_t)+'</td>'+
+          '<td><span class="badge '+(vq.activa?'ok':'off')+'">'+(vq.activa?'Activa':'Inactiva')+'</span></td>'+
+          '<td><div class="rowbtns">'+(acts||'<span class="mono" style="color:#C9C9C1;font-size:11px">solo lectura</span>')+'</div></td></tr>';
+      }).join('')+'</table>';
+  }
+
+  function form(vq){
+    const esNueva = !vq;
+    body.innerHTML =
+      '<h3 style="margin-top:0">'+(esNueva?'Nuevo tamano':'Editar tamano')+'</h3>'+
+      '<div class="field"><label>Nombre (ej. 7 m3)</label><input id="q_nombre" value="'+(esNueva?'':esc(vq.nombre))+'"></div>'+
+      '<div class="row2">'+
+        '<div class="field"><label>Capacidad (t)</label><input id="q_cap" value="'+(esNueva?'':numEs(vq.capacidad_t))+'"></div>'+
+        '<div class="field"><label>Minimo por viaje (t)</label><input id="q_min" value="'+(esNueva?'':numEs(vq.minimo_t))+'"></div>'+
+      '</div>'+
+      (esNueva?'':'<div class="field"><label>Estado</label><select id="q_activa"><option value="true"'+(vq.activa?' selected':'')+'>Activa</option><option value="false"'+(!vq.activa?' selected':'')+'>Inactiva</option></select></div>')+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>';
+    body.querySelector('#bCancel').onclick=cargar;
+    body.querySelector('#bSave').onclick=async function(){
+      const btn=this; const nombre=v(body,'q_nombre');
+      const cap=parseNum(v(body,'q_cap')), min=parseNum(v(body,'q_min'));
+      if(!nombre){ ctx.toast('Escribe el nombre del tamano.','error'); return; }
+      if(cap<=0){ ctx.toast('La capacidad debe ser mayor a 0.','error'); return; }
+      const activa = esNueva ? true : (body.querySelector('#q_activa').value==='true');
+      btn.disabled=true; btn.textContent='Guardando...';
+      try{
+        const res = await ctx.rpc('rcd_volqueta_guardar',{
+          p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id,
+          p_id: esNueva?null:vq.id, p_nombre:nombre, p_capacidad:cap, p_minimo:min, p_activa:activa
+        });
+        const r = scalar(res);
+        if(r==='OK'){ ctx.toast('Tamano guardado'); cargar(); return; }
+        if(r==='CAPACIDAD_INVALIDA') ctx.toast('La capacidad debe ser mayor a 0.','error');
+        else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso.','error');
+        else if(r==='NOMBRE_VACIO') ctx.toast('El nombre no puede ir vacio.','error');
+        else ctx.toast('No se pudo guardar.','error');
+      }catch(e){ ctx.toast('Error de conexion al guardar.','error'); }
+      btn.disabled=false; btn.textContent='Guardar';
+    };
+  }
+
+  async function anular(vq){
+    if(!(await ctx.confirm('Anular el tamano "'+vq.nombre+'"? Se ocultara, pero el historico queda.'))) return;
+    try{
+      const res = await ctx.rpc('rcd_volqueta_anular',{p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:vq.id});
+      const r = scalar(res);
+      if(r==='OK'){ ctx.toast('Tamano anulado'); cargar(); return; }
+      if(r==='SIN_PERMISO') ctx.toast('No tienes permiso para anular.','error');
+      else ctx.toast('No se pudo anular.','error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  cargar();
+}
+
 // ---------- utilidades ----------
+function numEs(n){ return (n==null?'':String(n).replace('.',',')); }
+function parseNum(s){ return parseFloat(String(s||'').replace(',','.'))||0; }
 function scalar(res){ return Array.isArray(res) ? res[0] : res; }
 function esc(s){ return (s==null?'':String(s)).replace(/"/g,'&quot;'); }
 function ro(puede){ return puede ? '' : 'readonly'; }
