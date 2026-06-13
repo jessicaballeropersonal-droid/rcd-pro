@@ -35,6 +35,7 @@ window.RCD_MODULOS.parametros = function(el, ctx){
     const body = el.querySelector('#pBody');
     if(activa==='identidad'){ identidad(body, ctx); }
     else if(activa==='sucursales'){ sucursales(body, ctx); }
+    else if(activa==='productos'){ productos(body, ctx); }
     else {
       body.innerHTML = '<div class="note">Esta seccion se construye en su paso del Grupo 1.</div>';
     }
@@ -196,6 +197,85 @@ async function sucursales(body, ctx){
       if(r==='OK'){ ctx.toast('Sucursal anulada'); cargar(); return; }
       if(r==='MIN_UNA_ACTIVA') ctx.toast('No puedes anular: debe quedar al menos una sucursal activa.','error');
       else if(r==='TIENE_MOVIMIENTOS') ctx.toast('No se puede anular: la sucursal tiene movimientos.','error');
+      else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso para anular.','error');
+      else ctx.toast('No se pudo anular.','error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  cargar();
+}
+
+// ---------- Pestana PRODUCTOS TERMINADOS ----------
+async function productos(body, ctx){
+  const puedeCrear    = ctx.can('parametros','escribir');
+  const puedeEditar   = ctx.can('parametros','editar');
+  const puedeEliminar = ctx.can('parametros','eliminar');
+
+  async function cargar(){
+    body.innerHTML = '<div class="loading">Cargando...</div>';
+    let lista=[];
+    try{ const r = await ctx.rpc('rcd_productos_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
+    render(lista);
+  }
+
+  function render(lista){
+    body.innerHTML =
+      '<h3 style="margin-top:0">Productos terminados</h3>'+
+      '<p class="lead">Lo que resulta de transformar el RCD aprovechable. Lo usan Produccion y Despacho.</p>'+
+      (puedeCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="btnNuevo">+ Agregar producto</button></div>':'')+
+      (lista.length? tabla(lista) : '<div class="empty">Aun no hay productos.</div>');
+    if(puedeCrear) body.querySelector('#btnNuevo').onclick=()=>form(null);
+    body.querySelectorAll('[data-edit]').forEach(b=>{ const i=+b.dataset.edit; b.onclick=()=>form(lista[i]); });
+    body.querySelectorAll('[data-anular]').forEach(b=>{ const i=+b.dataset.anular; b.onclick=()=>anular(lista[i]); });
+  }
+
+  function tabla(lista){
+    return '<table class="mtable"><tr><th>Producto</th><th>Estado</th><th></th></tr>'+
+      lista.map((p,i)=>{
+        const acts =
+          (puedeEditar  ?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
+          (puedeEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'');
+        return '<tr><td><b>'+esc(p.nombre)+'</b></td>'+
+          '<td><span class="badge '+(p.activo?'ok':'off')+'">'+(p.activo?'Activo':'Inactivo')+'</span></td>'+
+          '<td><div class="rowbtns">'+(acts||'<span class="mono" style="color:#C9C9C1;font-size:11px">solo lectura</span>')+'</div></td></tr>';
+      }).join('')+'</table>';
+  }
+
+  function form(p){
+    const esNuevo = !p;
+    body.innerHTML =
+      '<h3 style="margin-top:0">'+(esNuevo?'Nuevo producto':'Editar producto')+'</h3>'+
+      '<div class="field"><label>Nombre del producto</label><input id="p_nombre" value="'+(esNuevo?'':esc(p.nombre))+'"></div>'+
+      (esNuevo?'':'<div class="field"><label>Estado</label><select id="p_activo"><option value="true"'+(p.activo?' selected':'')+'>Activo</option><option value="false"'+(!p.activo?' selected':'')+'>Inactivo</option></select></div>')+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>';
+    body.querySelector('#bCancel').onclick=cargar;
+    body.querySelector('#bSave').onclick=async function(){
+      const btn=this; const nombre=v(body,'p_nombre');
+      if(!nombre){ ctx.toast('Escribe el nombre del producto.','error'); return; }
+      const activo = esNuevo ? true : (body.querySelector('#p_activo').value==='true');
+      btn.disabled=true; btn.textContent='Guardando...';
+      try{
+        const res = await ctx.rpc('rcd_producto_guardar',{
+          p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id,
+          p_id: esNuevo?null:p.id, p_nombre:nombre, p_activo:activo
+        });
+        const r = scalar(res);
+        if(r==='OK'){ ctx.toast('Producto guardado'); cargar(); return; }
+        if(r==='SIN_PERMISO') ctx.toast('No tienes permiso.','error');
+        else if(r==='NOMBRE_VACIO') ctx.toast('El nombre no puede ir vacio.','error');
+        else ctx.toast('No se pudo guardar.','error');
+      }catch(e){ ctx.toast('Error de conexion al guardar.','error'); }
+      btn.disabled=false; btn.textContent='Guardar';
+    };
+  }
+
+  async function anular(p){
+    if(!(await ctx.confirm('Anular el producto "'+p.nombre+'"? Se ocultara, pero el historico queda.'))) return;
+    try{
+      const res = await ctx.rpc('rcd_producto_anular',{p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:p.id});
+      const r = scalar(res);
+      if(r==='OK'){ ctx.toast('Producto anulado'); cargar(); return; }
+      if(r==='TIENE_INVENTARIO') ctx.toast('No se puede anular: el producto tiene inventario.','error');
       else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso para anular.','error');
       else ctx.toast('No se pudo anular.','error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
