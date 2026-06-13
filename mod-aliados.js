@@ -59,8 +59,8 @@ window.RCD_MODULOS.aliados = function(el, ctx){
       '</div>'+
       '<div class="field"><label>N.º inscripcion ante la autoridad (opcional)</label><input id="a_insc" value="'+(nuevo?'':esc(a.numero_inscripcion||''))+'" placeholder="aplica a maquila/gestor"></div>'+
       '<div class="field"><label>Tipo de aliado (marca una o ambas)</label>'+
-        '<label style="display:flex;align-items:center;gap:8px;font-weight:400;margin:6px 0"><input type="checkbox" id="a_maq" '+(!nuevo&&a.es_maquila?'checked':'')+'> Maquila (me procesa el RCD y vuelve a mi)</label>'+
-        '<label style="display:flex;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="a_rec" '+(!nuevo&&a.es_receptor?'checked':'')+'> Receptor (usa el RCD como materia prima, genera Anexo VI)</label>'+
+        '<label class="chk"><input type="checkbox" id="a_maq" '+(!nuevo&&a.es_maquila?'checked':'')+'><span>Maquila (me procesa el RCD y vuelve a mi)</span></label>'+
+        '<label class="chk"><input type="checkbox" id="a_rec" '+(!nuevo&&a.es_receptor?'checked':'')+'><span>Receptor (usa el RCD como materia prima, genera Anexo VI)</span></label>'+
       '</div>'+
       '<div class="field" id="a_precio_wrap"><label>Precio de maquila ($/t)</label><input id="a_precio" class="cellnum" style="width:160px" value="'+(nuevo?'':numEs(a.precio_maquila_t))+'"><div class="note">Precio por tonelada que te cobra esta maquila. Sera el valor por defecto en cada envio (editable alli).</div></div>'+
       (nuevo?'':'<div class="field"><label>Estado</label><select id="a_activo"><option value="true"'+(a.activo?' selected':'')+'>Activo</option><option value="false"'+(!a.activo?' selected':'')+'>Inactivo</option></select></div>')+
