@@ -172,13 +172,14 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       ORDEN_NO_ASIGNABLE:'Esa orden ya no se puede asignar.',
       ORDEN_NO_OFERTABLE:'Solo se ofertan ordenes pendientes.',
       ORDEN_NO_PARTIBLE:'Solo se parten ordenes pendientes u ofertadas (sin vehiculo).',
-      SIN_TAMANO_MITAD:'No existe un tamano que sea la mitad; no se puede partir.'})[r] || 'No se pudo completar la accion.';
+      SIN_TAMANO_MITAD:'No existe un tamano que sea la mitad; no se puede partir.',
+      ORDEN_NO_LIBERABLE:'Esa orden no se puede liberar (solo ofertadas o asignadas).'})[r] || 'No se pudo completar la accion.';
   }
   function accionesOrden(o,i){
     let h='';
     if(o.estado==='pendiente' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button><button class="btn ghost sm" data-oofe="'+i+'">Ofertar</button><button class="btn ghost sm" data-opar="'+i+'">Partir</button>';
-    if(o.estado==='ofertada' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button>';
-    if(o.estado==='asignada' && pEditar) h+='<button class="btn ghost sm" data-oruta="'+i+'">En ruta</button>';
+    if(o.estado==='ofertada' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button><button class="btn ghost sm" data-olib="'+i+'">Liberar</button>';
+    if(o.estado==='asignada' && pEditar) h+='<button class="btn ghost sm" data-oruta="'+i+'">En ruta</button><button class="btn ghost sm" data-olib="'+i+'">Liberar</button>';
     if(o.estado==='en_ruta' && pEditar) h+='<button class="btn ghost sm" data-ocomp="'+i+'">Completar</button>';
     if(['pendiente','ofertada','asignada'].indexOf(o.estado)>=0 && pEliminar) h+='<button class="btn ghost sm" data-oanu="'+i+'">Anular</button>';
     return h || '<span class="mono" style="color:#C9C9C1;font-size:11px">-</span>';
@@ -227,6 +228,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       const asg=el.querySelector('[data-oasg="'+i+'"]'); if(asg) asg.onclick=()=>formAsignar(s,o);
       const ofe=el.querySelector('[data-oofe="'+i+'"]'); if(ofe) ofe.onclick=()=>ordenOfertar(s,o);
       const par=el.querySelector('[data-opar="'+i+'"]'); if(par) par.onclick=()=>ordenPartir(s,o);
+      const lib=el.querySelector('[data-olib="'+i+'"]'); if(lib) lib.onclick=()=>ordenLiberar(s,o);
       const ruta=el.querySelector('[data-oruta="'+i+'"]'); if(ruta) ruta.onclick=()=>ordenEstado(s,o,'en_ruta');
       const comp=el.querySelector('[data-ocomp="'+i+'"]'); if(comp) comp.onclick=()=>ordenEstado(s,o,'completada');
       const anu=el.querySelector('[data-oanu="'+i+'"]'); if(anu) anu.onclick=()=>ordenAnular(s,o);
@@ -305,6 +307,14 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     if(!(await ctx.confirm('Partir la orden '+(o.numero||'')+' ('+(o.tamano||'')+') en 2 viajes de la mitad? Quedara la trazabilidad del cambio.'))) return;
     try{ const r=scalar(await ctx.rpc('rcd_orden_partir',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_orden_id:o.id}));
       if(r==='OK'){ ctx.toast('Orden partida en 2'); ordenes(s); return; }
+      ctx.toast(msgOrden(r),'error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
+  }
+
+  async function ordenLiberar(s,o){
+    if(!(await ctx.confirm('Liberar la orden '+(o.numero||'')+'? Vuelve a Pendiente para reasignarla o reofertarla, y deja libre el vehiculo.'))) return;
+    try{ const r=scalar(await ctx.rpc('rcd_orden_liberar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_orden_id:o.id}));
+      if(r==='OK'){ ctx.toast('Orden liberada'); ordenes(s); return; }
       ctx.toast(msgOrden(r),'error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
