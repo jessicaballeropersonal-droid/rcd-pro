@@ -16,6 +16,34 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
     return '<span class="badge off">'+esc(e||'')+'</span>';
   }
   function metodoTxt(m){ return m==='volumen' ? 'Vol × dens' : 'Bascula'; }
+
+  // --- Fotos: comprimir en el dispositivo (liviano pero nitido) y subir a Storage ---
+  function comprimirFoto(file, maxDim, calidad){
+    return new Promise(function(resolve,reject){
+      const img=new Image(), url=URL.createObjectURL(file);
+      img.onload=function(){
+        let w=img.width, h=img.height;
+        if(w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
+        else if(h>=w && h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        URL.revokeObjectURL(url);
+        cv.toBlob(function(b){ b?resolve(b):reject(new Error('toBlob')); },'image/jpeg',calidad);
+      };
+      img.onerror=function(){ URL.revokeObjectURL(url); reject(new Error('img')); };
+      img.src=url;
+    });
+  }
+  async function subirFoto(blob){
+    const name='rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)+'.jpg';
+    const path=ctx.ses.gestor_id+'/'+name;
+    const res=await fetch(ctx.url+'/storage/v1/object/rcd-fotos/'+path,{
+      method:'POST',
+      headers:{ apikey:ctx.headers.apikey, Authorization:ctx.headers.Authorization, 'Content-Type':'image/jpeg' },
+      body:blob });
+    if(!res.ok) throw new Error('upload '+res.status);
+    return ctx.url+'/storage/v1/object/public/rcd-fotos/'+path;
+  }
   function msg(r){
     return ({SIN_PERMISO:'No tienes permiso.', ORIGEN_INVALIDO:'Origen invalido.',
       SIN_MATERIAL:'Selecciona el material (tipo de RCD).', METODO_INVALIDO:'Metodo invalido.',
@@ -90,6 +118,8 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
     let h='';
     if(r.estado==='esperando_tara' && pEditar) h+='<button class="btn ghost sm" data-tara="'+i+'">Registrar tara</button>';
     if(r.estado==='excedido_pendiente' && pEliminar) h+='<button class="btn primary sm" data-apr="'+i+'">Aprobar</button>';
+    if(r.foto1_url) h+='<a class="btn ghost sm" href="'+esc(r.foto1_url)+'" target="_blank" rel="noopener">Foto 1</a>';
+    if(r.foto2_url) h+='<a class="btn ghost sm" href="'+esc(r.foto2_url)+'" target="_blank" rel="noopener">Foto 2</a>';
     if(r.estado!=='anulada' && pEliminar) h+='<button class="btn ghost sm" data-anu="'+i+'">Anular</button>';
     h+='<button class="btn ghost sm" disabled title="Se genera en Cumplimiento (G5)">Anexo II</button>';
     return h || '<span class="mono" style="color:#C9C9C1;font-size:11px">-</span>';
@@ -157,6 +187,10 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
 
       // CONTACTO + OBS
       '<div class="field"><label>WhatsApp o correo (para enviar el Anexo II)</label><input id="p_contacto" placeholder="300 123 4567 / correo@dominio.com"></div>'+
+      '<div class="field"><label>Fotos (opcional, max 2 · se comprimen solas)</label>'+
+        '<div id="fotosWrap" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"></div>'+
+        '<input type="file" id="fileFoto" accept="image/*" capture="environment" style="display:none">'+
+      '</div>'+
       '<div class="field"><label>Observaciones</label><textarea id="p_obs" rows="2"></textarea></div>'+
 
       '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar recepcion</button></div>'+
@@ -175,6 +209,29 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
       }catch(e){ cupoBox.innerHTML=''; }
     }
     if(selOrden) selOrden.onchange=mostrarCupo;
+
+    // --- Fotos ---
+    const fotos=[]; // urls subidas (max 2)
+    const fotosWrap=el.querySelector('#fotosWrap'), fileFoto=el.querySelector('#fileFoto');
+    function renderFotos(){
+      let h='';
+      fotos.forEach(function(u,i){
+        h+='<div style="position:relative"><img src="'+u+'" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)">'+
+           '<button type="button" data-qf="'+i+'" title="Quitar" style="position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;border:none;background:var(--bad);color:#fff;cursor:pointer;font-weight:700;line-height:1">×</button></div>';
+      });
+      if(fotos.length<2) h+='<button type="button" class="btn ghost sm" id="bAddFoto">+ Foto</button>';
+      fotosWrap.innerHTML=h;
+      const add=fotosWrap.querySelector('#bAddFoto'); if(add) add.onclick=()=>fileFoto.click();
+      fotosWrap.querySelectorAll('[data-qf]').forEach(function(btn){ btn.onclick=function(){ fotos.splice(+btn.dataset.qf,1); renderFotos(); }; });
+    }
+    fileFoto.onchange=async function(){
+      const f=this.files&&this.files[0]; this.value=''; if(!f) return;
+      if(fotos.length>=2){ ctx.toast('Maximo 2 fotos.','error'); return; }
+      ctx.toast('Procesando foto...','info');
+      try{ const blob=await comprimirFoto(f, 1280, 0.7); const url=await subirFoto(blob); fotos.push(url); renderFotos(); ctx.toast('Foto agregada'); }
+      catch(e){ ctx.toast('No se pudo subir la foto.','error'); }
+    };
+    renderFotos();
     function tgOrigen(){ origen=selOrigen.value;
       el.querySelector('#bOrden').style.display = origen==='orden'?'':'none';
       el.querySelector('#bPart').style.display  = origen==='particular'?'':'none'; }
@@ -209,7 +266,8 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
         p_tara_t:  metodo==='bascula' ? (v(el,'p_tara')?parseNum(v(el,'p_tara')):null) : null,
         p_volumen_m3: metodo==='volumen' ? parseNum(v(el,'p_vol')) : null,
         p_densidad:   metodo==='volumen' ? parseNum(v(el,'p_dens')) : null,
-        p_contacto_anexo: v(el,'p_contacto'), p_observaciones: v(el,'p_obs') };
+        p_contacto_anexo: v(el,'p_contacto'), p_observaciones: v(el,'p_obs'),
+        p_foto1_url: fotos[0]||null, p_foto2_url: fotos[1]||null };
       btn.disabled=true; btn.textContent='Guardando...';
       try{ const r=scalar(await ctx.rpc('rcd_recepcion_crear',body));
         if(typeof r==='string' && r.indexOf('PEND:')===0){ ctx.toast('Guardada '+r.slice(5)+', pero EXCEDE el cupo: requiere aprobacion del admin.','error'); lista(); return; }
