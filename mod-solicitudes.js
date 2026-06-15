@@ -156,7 +156,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     if(e==='asignada') return '<span class="badge ok">Asignada</span>';
     if(e==='en_ruta') return '<span class="badge warn">En ruta</span>';
     if(e==='completada') return '<span class="badge ok">Completada</span>';
-    if(e==='reemplazada') return '<span class="badge off">Reemplazada</span>';
+    if(e==='reemplazada') return '<span class="badge off">Dividida en 2</span>';
     return '<span class="badge off">'+esc(e||'')+'</span>';
   }
   function msgOrden(r){
@@ -164,6 +164,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       SIN_TAMANO:'Define el tamano requerido en la solicitud (editala).',
       YA_GENERADAS:'Las ordenes ya fueron generadas para esta solicitud.',
       CAPACIDAD_INVALIDA:'El tamano no tiene una capacidad valida.',
+      ORDENES_EN_PROGRESO:'Hay ordenes ya asignadas o en ruta; no se pueden regenerar. Anula o completa esas primero.',
       VEHICULO_VACIO:'Selecciona un vehiculo.', VEHICULO_INVALIDO:'Vehiculo invalido.',
       VEHICULO_INACTIVO:'El vehiculo esta inactivo.', DOCS_VENCIDOS:'El vehiculo tiene SOAT o tecnomecanica vencida.',
       VEHICULO_OCUPADO:'El vehiculo ya tiene una orden asignada (ocupado).',
@@ -186,14 +187,23 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
   async function ordenes(s){
     el.innerHTML='<div class="loading">Cargando...</div>';
     let os=[]; try{ const r=await ctx.rpc('rcd_ordenes_lista',{p_solicitud_id:s.id}); os=Array.isArray(r)?r:[]; }catch(e){}
+    let tams=[]; try{ const r=await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); tams=Array.isArray(r)?r:[]; }catch(e){}
     const sinTam = !s.tamano_id;
+    const tReq = tams.filter(t=>t.id===s.tamano_id)[0];
+    const cap = tReq ? (Number(tReq.capacidad_t)||0) : 0;
+    const qty = Number(s.cantidad_declarada)||0;
+    const est = cap>0 ? Math.ceil(qty/cap) : null;
+    const nReales = os.filter(o=>o.estado!=='reemplazada').length;
     el.innerHTML=
       '<div class="mcard" style="max-width:940px">'+
       '<button class="btn ghost sm" id="bBackL">&larr; Solicitudes</button>'+
       '<h3 style="margin:12px 0 2px">Ordenes de '+esc(s.numero||'')+'</h3>'+
-      '<p class="lead">'+esc(s.cliente||'')+' - '+esc(s.obra||'')+' · '+(s.tipo==='despacho'?'Despacho':'Recepcion')+' · declarado '+numEs(s.cantidad_declarada)+' t · tamano '+esc(s.tamano||'cualquiera')+'</p>'+
+      '<p class="lead">'+esc(s.cliente||'')+' - '+esc(s.obra||'')+' · '+(s.tipo==='despacho'?'Despacho':'Recepcion')+'</p>'+
+      '<div class="note" style="background:#F0FAF8;border-color:#9FD8CE">Declarado: <b>'+numEs(qty)+' t</b>'+
+        (cap>0?' · Capacidad por viaje ('+esc(s.tamano||'')+'): <b>'+numEs(cap)+' t</b> · Viajes a generar: <b>'+est+'</b>':' · define el tamano requerido para calcular los viajes')+
+        ' · Ordenes actuales: <b>'+nReales+'</b></div>'+
       (pCrear?'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
-        (os.length===0 ? '<button class="btn primary sm" id="bGen"'+(sinTam?' disabled':'')+'>Generar ordenes</button>' : '')+
+        '<button class="btn primary sm" id="bGen"'+(sinTam?' disabled':'')+'>'+(os.length?'Regenerar ordenes':'Generar ordenes')+'</button>'+
         '<button class="btn ghost sm" id="bAdd">+ Orden suelta</button>'+
       '</div>':'')+
       (sinTam?'<div class="note warn">Para generar ordenes automaticas, edita la solicitud y define un tamano requerido.</div>':'')+
@@ -210,7 +220,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       '</div>';
     el.querySelector('#bBackL').onclick=lista;
     if(pCrear){
-      const g=el.querySelector('#bGen'); if(g && !sinTam) g.onclick=()=>generar(s);
+      const g=el.querySelector('#bGen'); if(g && !sinTam) g.onclick=()=>generar(s, os.length>0);
       const a=el.querySelector('#bAdd'); if(a) a.onclick=()=>agregarOrden(s);
     }
     os.forEach(function(o,i){
@@ -223,8 +233,11 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     });
   }
 
-  async function generar(s){
-    if(!(await ctx.confirm('Generar las ordenes de '+(s.numero||'')+' segun la cantidad declarada y el tamano requerido?'))) return;
+  async function generar(s, regen){
+    const msg = regen
+      ? 'Regenerar las ordenes de '+(s.numero||'')+'? Se reemplazan las pendientes/ofertadas por las nuevas (no toca las que ya esten asignadas o en ruta).'
+      : 'Generar las ordenes de '+(s.numero||'')+' segun la cantidad declarada y el tamano requerido?';
+    if(!(await ctx.confirm(msg))) return;
     try{ const r=scalar(await ctx.rpc('rcd_solicitud_generar_ordenes',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_solicitud_id:s.id}));
       if(r && !isNaN(+r)){ ctx.toast('Se generaron '+r+' ordenes'); ordenes(s); return; }
       ctx.toast(msgOrden(r),'error');
