@@ -81,6 +81,7 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
     };
     rows.forEach(function(r,i){
       const t=el.querySelector('[data-tara="'+i+'"]'); if(t) t.onclick=()=>taraForm(r);
+      const ap=el.querySelector('[data-apr="'+i+'"]'); if(ap) ap.onclick=()=>aprobar(r);
       const a=el.querySelector('[data-anu="'+i+'"]'); if(a) a.onclick=()=>anular(r);
     });
   }
@@ -88,6 +89,7 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
   function accionesIdx(r,i){
     let h='';
     if(r.estado==='esperando_tara' && pEditar) h+='<button class="btn ghost sm" data-tara="'+i+'">Registrar tara</button>';
+    if(r.estado==='excedido_pendiente' && pEliminar) h+='<button class="btn primary sm" data-apr="'+i+'">Aprobar</button>';
     if(r.estado!=='anulada' && pEliminar) h+='<button class="btn ghost sm" data-anu="'+i+'">Anular</button>';
     h+='<button class="btn ghost sm" disabled title="Se genera en Cumplimiento (G5)">Anexo II</button>';
     return h || '<span class="mono" style="color:#C9C9C1;font-size:11px">-</span>';
@@ -115,6 +117,7 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
         '<div class="field"><label>Orden que llega</label><select id="p_orden"><option value="">Selecciona...</option>'+
           ordenes.map(o=>'<option value="'+o.orden_id+'">'+esc(o.etiqueta||'')+'</option>').join('')+'</select>'+
           (ordenes.length?'':'<div class="note warn">No hay ordenes de recepcion asignadas/en ruta. Crea/asigna en Solicitudes, o usa Particular.</div>')+'</div>'+
+        '<div id="cupoBox"></div>'+
       '</div>'+
 
       // PARTICULAR
@@ -160,6 +163,18 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
       '</div>';
 
     const selOrigen=el.querySelector('#p_origen'), selMetodo=el.querySelector('#p_metodo');
+    const selOrden=el.querySelector('#p_orden'), cupoBox=el.querySelector('#cupoBox');
+    async function mostrarCupo(){
+      if(!selOrden || !selOrden.value){ if(cupoBox) cupoBox.innerHTML=''; return; }
+      try{ const r=await ctx.rpc('rcd_orden_cupo',{p_orden_id:selOrden.value});
+        const c=Array.isArray(r)&&r.length?r[0]:null;
+        if(c && Number(c.tope_t)>0){
+          const tope=Number(c.tope_t), rec=Number(c.recibido_t), disp=tope-rec;
+          cupoBox.innerHTML='<div class="note'+(disp<=0?' warn':'')+'">Cupo de la obra: declarado <b>'+numEs(tope)+' t</b> · recibido <b>'+numEs(rec)+' t</b> · disponible <b>'+numEs(disp)+' t</b>'+(disp<=0?'. Lo que pese de mas quedara pendiente de aprobacion del admin.':'')+'</div>';
+        } else { cupoBox.innerHTML='<div class="note">Esta obra no tiene cupo total declarado (no se bloquea por cupo).</div>'; }
+      }catch(e){ cupoBox.innerHTML=''; }
+    }
+    if(selOrden) selOrden.onchange=mostrarCupo;
     function tgOrigen(){ origen=selOrigen.value;
       el.querySelector('#bOrden').style.display = origen==='orden'?'':'none';
       el.querySelector('#bPart').style.display  = origen==='particular'?'':'none'; }
@@ -197,6 +212,7 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
         p_contacto_anexo: v(el,'p_contacto'), p_observaciones: v(el,'p_obs') };
       btn.disabled=true; btn.textContent='Guardando...';
       try{ const r=scalar(await ctx.rpc('rcd_recepcion_crear',body));
+        if(typeof r==='string' && r.indexOf('PEND:')===0){ ctx.toast('Guardada '+r.slice(5)+', pero EXCEDE el cupo: requiere aprobacion del admin.','error'); lista(); return; }
         if(typeof r==='string' && r.indexOf('PES-')===0){ ctx.toast('Recepcion '+r+' guardada'); lista(); return; }
         ctx.toast(msg(r),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
@@ -222,10 +238,19 @@ window.RCD_MODULOS.pesaje = function(el, ctx){
       btn.disabled=true; btn.textContent='Guardando...';
       try{ const res=scalar(await ctx.rpc('rcd_recepcion_tara',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:r.id,p_tara_t:tara}));
         if(res==='OK'){ ctx.toast('Neto registrado'); lista(); return; }
+        if(res==='PEND'){ ctx.toast('Neto registrado, pero EXCEDE el cupo: requiere aprobacion del admin.','error'); lista(); return; }
         ctx.toast(msg(res),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Guardar neto';
     };
+  }
+
+  async function aprobar(r){
+    if(!(await ctx.confirm('Aprobar la recepcion '+(r.numero||'')+' que excede el cupo? Quedara OK y se completara su orden.'))) return;
+    try{ const res=scalar(await ctx.rpc('rcd_recepcion_aprobar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:r.id}));
+      if(res==='OK'){ ctx.toast('Recepcion aprobada'); lista(); return; }
+      ctx.toast(res==='NO_PENDIENTE'?'Esa recepcion no esta pendiente.':msg(res),'error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
   async function anular(r){
