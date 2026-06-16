@@ -344,12 +344,11 @@ window.RCD_MODULOS.despacho = function(el, ctx){
   async function formDespacho(modo, od){
     el.innerHTML='<div class="loading">Cargando...</div>';
     let ubics=[]; try{ const r=await ctx.rpc('rcd_ubicaciones_lista',{p_gestor_id:ctx.ses.gestor_id}); ubics=Array.isArray(r)?r:[]; }catch(e){}
-    let clientes=[], productos=[], obrasPma=[], volqs=[];
+    let clientes=[], productos=[], obrasPma=[];
     if(modo==='directa'){
       try{ const r=await ctx.rpc('rcd_clientes_lista',{p_gestor_id:ctx.ses.gestor_id}); clientes=(Array.isArray(r)?r:[]).filter(c=>c.activo!==false); }catch(e){}
       try{ const r=await ctx.rpc('rcd_productos_lista',{p_gestor_id:ctx.ses.gestor_id}); productos=(Array.isArray(r)?r:[]).filter(p=>p.activo); }catch(e){}
       try{ const r=await ctx.rpc('rcd_obras_cotizadas',{p_gestor_id:ctx.ses.gestor_id}); obrasPma=Array.isArray(r)?r:[]; }catch(e){}
-      try{ const r=await ctx.rpc('rcd_volqueteros_lista',{p_gestor_id:ctx.ses.gestor_id}); volqs=(Array.isArray(r)?r:[]).filter(x=>x.activo!==false); }catch(e){}
     }
     let ubic=(ubics[0]&&ubics[0].id)||'planta';
     let metodo='bascula', transporte='cliente';
@@ -370,9 +369,7 @@ window.RCD_MODULOS.despacho = function(el, ctx){
         '<div class="field" id="d_obrawrap" style="display:none"><label>Obra PMA</label><select id="d_obra"><option value="">Selecciona...</option>'+
           obrasPma.map(o=>'<option value="'+o.id+'">'+esc(o.cliente||'')+' - '+esc(o.nombre)+'</option>').join('')+'</select><div id="metaBox"></div></div>'+
         '<div class="field"><label>Transporte</label><select id="d_transp"><option value="cliente">Cliente recoge</option><option value="nosotros">Nosotros entregamos</option></select></div>'+
-        '<div class="row2" id="d_cliwrap"><div class="field"><label>Placa</label><input id="d_placa" placeholder="ABC123"></div><div class="field"><label>Conductor</label><input id="d_cond"></div></div>'+
-        '<div class="field" id="d_noswrap" style="display:none"><label>Volquetero</label><select id="d_volq"><option value="">Selecciona...</option>'+
-          volqs.map(x=>'<option value="'+x.id+'">'+esc(x.nombre||x.razon_social||'')+'</option>').join('')+'</select></div>';
+        '<div class="row2" id="d_cliwrap"><div class="field"><label>Placa</label><input id="d_placa" placeholder="ABC123"></div><div class="field"><label>Conductor</label><input id="d_cond"></div></div>';
     }
 
     el.innerHTML=
@@ -436,8 +433,7 @@ window.RCD_MODULOS.despacho = function(el, ctx){
       el.querySelector('#d_pma').onclick=function(){ el.querySelector('#d_obrawrap').style.display=this.checked?'':'none'; if(!this.checked) pintarMeta(null); };
       el.querySelector('#d_obra').onchange=function(){ pintarMeta(this.value); };
       el.querySelector('#d_transp').onchange=function(){ transporte=this.value;
-        el.querySelector('#d_cliwrap').style.display=transporte==='cliente'?'':'none';
-        el.querySelector('#d_noswrap').style.display=transporte==='nosotros'?'':'none'; };
+        el.querySelector('#d_cliwrap').style.display=transporte==='cliente'?'':'none'; };
     }
     calcNeto();
 
@@ -451,8 +447,9 @@ window.RCD_MODULOS.despacho = function(el, ctx){
         p_obra_id: (modo==='directa' && el.querySelector('#d_pma').checked)?(v(el,'d_obra')||null):null,
         p_es_pma: modo==='directa' && el.querySelector('#d_pma').checked,
         p_ubicacion: v(el,'d_ubic'), p_transporte: modo==='directa'?v(el,'d_transp'):null,
-        p_volquetero_id: (modo==='directa' && v(el,'d_transp')==='nosotros')?(v(el,'d_volq')||null):null,
-        p_placa: modo==='directa'?v(el,'d_placa'):null, p_conductor: modo==='directa'?v(el,'d_cond'):null,
+        p_volquetero_id: null,
+        p_placa: (modo==='directa' && v(el,'d_transp')==='cliente')?v(el,'d_placa'):null,
+        p_conductor: (modo==='directa' && v(el,'d_transp')==='cliente')?v(el,'d_cond'):null,
         p_metodo: metodoV,
         p_bruto: metodoV==='bascula'?parseNum(v(el,'d_bruto')):null,
         p_tara: (metodoV==='bascula' && v(el,'d_tara')!=='')?parseNum(v(el,'d_tara')):null,
