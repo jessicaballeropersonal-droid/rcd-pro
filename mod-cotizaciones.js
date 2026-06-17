@@ -49,7 +49,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
 
   // ===================== EDITOR =====================
   async function abrirEditor(cotId){
-    const st={ id:null, numero:'', cliente_id:'', obra_id:'', obra:'', comuna_id:'', municipio_id:'', fecha:'', valida_hasta:'',
+    const st={ id:null, numero:'', cliente_id:'', cliente_nombre:'', obra_id:'', obra:'', comuna_id:'', municipio_id:'', fecha:'', valida_hasta:'',
                observaciones:'', estado:'borrador', lineas:[], productos:[], items:[], volqs:[], aliados:[], tarifasNew:[], clientes:[], obrasOpts:[] };
     try{ const r=await ctx.rpc('rcd_clientes_lista',{p_gestor_id:ctx.ses.gestor_id}); st.clientes=Array.isArray(r)?r:[]; }catch(e){}
 
@@ -58,7 +58,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
         const cab=(await ctx.rpc('rcd_cotizacion_get',{p_id:cotId}))[0];
         st.id=cab.id; st.numero=cab.numero; st.cliente_id=cab.cliente_id||''; st.obra_id=cab.obra_id||''; st.obra=cab.obra||'';
         st.comuna_id=cab.comuna_id||''; st.fecha=cab.fecha||''; st.valida_hasta=cab.valida_hasta||'';
-        st.observaciones=cab.observaciones||''; st.estado=cab.estado||'borrador';
+        st.observaciones=cab.observaciones||''; st.estado=cab.estado||'borrador'; st.cliente_nombre=cab.cliente||'';
         if(st.cliente_id){ const r=await ctx.rpc('rcd_obras_lista',{p_cliente_id:st.cliente_id}); st.obrasOpts=Array.isArray(r)?r:[]; }
         const _ob=st.obrasOpts.find(o=>o.id===st.obra_id); if(_ob){ st.municipio_id=_ob.municipio_id||''; if(!st.comuna_id) st.comuna_id=_ob.comuna_id||''; }
         await cargarContexto(st);
@@ -131,14 +131,72 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     const box=el.querySelector('#accionesBox'); if(!box) return;
     let h='';
     if(editable(st)) h+='<button class="btn primary" id="bGuardar">Guardar</button>';
+    if(st.id) h+='<button class="btn ghost" id="bPDF">Ver PDF</button>';
     if(st.id && st.estado==='borrador' && pEditar){
       h+='<button class="btn ghost" id="bAceptar">Aceptar (habilita la obra)</button>';
       h+='<button class="btn ghost" id="bRechazar">Rechazar</button>';
     }
     box.innerHTML=h;
     const g=box.querySelector('#bGuardar'); if(g) g.onclick=()=>guardar(st);
+    const pdf=box.querySelector('#bPDF'); if(pdf) pdf.onclick=()=>verPDF(st);
     const a=box.querySelector('#bAceptar'); if(a) a.onclick=()=>cambiarEstado(st,'aceptada');
     const r=box.querySelector('#bRechazar'); if(r) r.onclick=()=>cambiarEstado(st,'rechazada');
+  }
+
+  async function verPDF(st){
+    const w=window.open('','_blank');
+    if(!w){ ctx.toast('Permite las ventanas emergentes para ver el PDF.','error'); return; }
+    w.document.write('<p style="font-family:Arial;padding:24px">Generando PDF...</p>');
+    let g={}; try{ const r=await ctx.rpc('rcd_gestor',{p_gestor_id:ctx.ses.gestor_id}); g=(Array.isArray(r)?r[0]:r)||{}; }catch(e){}
+    let sub=0, iva=0;
+    st.lineas.forEach(l=>{ const lt=(+l.cantidad||0)*(+l.precio_unit||0); sub+=lt; if(l.aplica_iva) iva+=lt*0.19; });
+    const total=sub+iva;
+    const cliente = st.cliente_nombre || ((st.clientes.find(c=>c.id===st.cliente_id)||{}).razon_social) || '';
+    const filas = st.lineas.map(l=>{
+      const lt=(+l.cantidad||0)*(+l.precio_unit||0);
+      return '<tr><td>'+esc(l.descripcion||'')+'</td><td>'+numEs(l.cantidad||0)+'</td><td>'+money(l.precio_unit)+'</td><td>'+money(lt)+'</td></tr>';
+    }).join('');
+    const estadoTxt = st.estado==='aceptada'?'ACEPTADA':(st.estado==='rechazada'?'RECHAZADA':'BORRADOR');
+    const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+      '<title>Cotizacion '+esc(st.numero||'')+'</title><style>'+
+      '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:24px;font-size:13px}'+
+      '.bar{display:flex;justify-content:flex-end;margin-bottom:16px}.bar button{padding:9px 16px;border:1px solid #111;background:#0F766E;color:#fff;border-radius:6px;cursor:pointer;font-size:13px}'+
+      '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:12px}'+
+      '.emp{max-width:60%}.emp h1{font-size:18px;margin:0 0 4px}.emp p{margin:1px 0;color:#444;font-size:12px}'+
+      '.doc{text-align:right}.doc h2{margin:0;font-size:20px;letter-spacing:1px}.doc p{margin:2px 0;font-size:12px}'+
+      '.badge{display:inline-block;border:1px solid #111;padding:2px 8px;border-radius:10px;font-size:11px;margin-top:4px}'+
+      '.parts{display:flex;gap:20px;margin:16px 0}.part{flex:1}.part h3{font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px;letter-spacing:1px}.part p{margin:1px 0}'+
+      'table{width:100%;border-collapse:collapse;margin-top:8px}th,td{padding:8px;border-bottom:1px solid #ddd}'+
+      'th{text-align:left;background:#f4f4f4;font-size:11px;text-transform:uppercase}th:nth-child(n+2),td:nth-child(n+2){text-align:right}'+
+      '.tot{margin-left:auto;width:260px;margin-top:12px}.tot div{display:flex;justify-content:space-between;padding:4px 0}'+
+      '.tot .g{font-size:16px;font-weight:bold;border-top:2px solid #111;padding-top:8px;margin-top:4px}'+
+      '.obs{margin-top:18px;color:#444}.foot{margin-top:24px;color:#999;font-size:11px;text-align:center}'+
+      '@media print{.bar{display:none}}'+
+      '</style></head><body>'+
+      '<div class="bar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>'+
+      '<div class="head"><div class="emp">'+
+        (g.logo_url?'<img src="'+esc(g.logo_url)+'" style="max-height:54px;margin-bottom:6px"><br>':'')+
+        '<h1>'+esc(g.nombre||'Empresa')+'</h1>'+
+        (g.nit?'<p>NIT: '+esc(g.nit)+'</p>':'')+
+        (g.direccion?'<p>'+esc(g.direccion)+'</p>':'')+
+        (g.telefono?'<p>Tel: '+esc(g.telefono)+'</p>':'')+
+        (g.correo?'<p>'+esc(g.correo)+'</p>':'')+
+      '</div><div class="doc"><h2>COTIZACION</h2><p><b>'+esc(st.numero||'')+'</b></p>'+
+        (st.fecha?'<p>Fecha: '+esc(st.fecha)+'</p>':'')+
+        (st.valida_hasta?'<p>Valida hasta: '+esc(st.valida_hasta)+'</p>':'')+
+        '<span class="badge">'+estadoTxt+'</span></div></div>'+
+      '<div class="parts"><div class="part"><h3>Cliente</h3><p>'+esc(cliente||'-')+'</p></div>'+
+        '<div class="part"><h3>Obra</h3><p>'+esc(st.obra||'-')+'</p></div></div>'+
+      '<table><thead><tr><th>Descripcion</th><th>Cant.</th><th>V. Unit</th><th>Total</th></tr></thead>'+
+        '<tbody>'+(filas||'<tr><td colspan="4">Sin lineas</td></tr>')+'</tbody></table>'+
+      '<div class="tot"><div><span>Subtotal</span><span>'+money(sub)+'</span></div>'+
+        '<div><span>IVA (19%)</span><span>'+money(iva)+'</span></div>'+
+        '<div class="g"><span>Total</span><span>'+money(total)+'</span></div></div>'+
+      (st.observaciones?'<div class="obs"><b>Observaciones:</b> '+esc(st.observaciones)+'</div>':'')+
+      '<div class="foot">Generado por RCD Pro</div>'+
+      '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>'+
+      '</body></html>';
+    w.document.open(); w.document.write(html); w.document.close();
   }
 
   // ---- lineas ----
