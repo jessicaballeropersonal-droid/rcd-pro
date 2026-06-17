@@ -212,7 +212,6 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
           (g.direccion?'<span>'+esc(g.direccion)+'</span>':'')+
         '</div>'+
       '</div></div></div>'+
-      '<script>function go(){setTimeout(function(){window.print();},250);}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(go);}else{window.onload=function(){setTimeout(go,500);};}<\/script>'+
       '</body></html>';
   }
 
