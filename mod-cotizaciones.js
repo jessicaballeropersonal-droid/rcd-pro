@@ -154,47 +154,69 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     const cliente = st.cliente_nombre || ((st.clientes.find(c=>c.id===st.cliente_id)||{}).razon_social) || '';
     const filas = st.lineas.map(l=>{
       const lt=(+l.cantidad||0)*(+l.precio_unit||0);
-      return '<tr><td>'+esc(l.descripcion||'')+'</td><td>'+numEs(l.cantidad||0)+'</td><td>'+money(l.precio_unit)+'</td><td>'+money(lt)+'</td></tr>';
+      return '<tr><td>'+esc(l.descripcion||'')+'</td><td class="r">'+numEs(l.cantidad||0)+'</td><td class="r">'+money(l.precio_unit)+'</td><td class="r">'+money(lt)+'</td></tr>';
     }).join('');
     const estadoTxt = st.estado==='aceptada'?'ACEPTADA':(st.estado==='rechazada'?'RECHAZADA':'BORRADOR');
-    const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+    const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+      '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'+
+      '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">'+
       '<title>Cotizacion '+esc(st.numero||'')+'</title><style>'+
-      '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:24px;font-size:13px}'+
-      '.bar{display:flex;justify-content:flex-end;margin-bottom:16px}.bar button{padding:9px 16px;border:1px solid #111;background:#0F766E;color:#fff;border-radius:6px;cursor:pointer;font-size:13px}'+
-      '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:12px}'+
-      '.emp{max-width:60%}.emp h1{font-size:18px;margin:0 0 4px}.emp p{margin:1px 0;color:#444;font-size:12px}'+
-      '.doc{text-align:right}.doc h2{margin:0;font-size:20px;letter-spacing:1px}.doc p{margin:2px 0;font-size:12px}'+
-      '.badge{display:inline-block;border:1px solid #111;padding:2px 8px;border-radius:10px;font-size:11px;margin-top:4px}'+
-      '.parts{display:flex;gap:20px;margin:16px 0}.part{flex:1}.part h3{font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px;letter-spacing:1px}.part p{margin:1px 0}'+
-      'table{width:100%;border-collapse:collapse;margin-top:8px}th,td{padding:8px;border-bottom:1px solid #ddd}'+
-      'th{text-align:left;background:#f4f4f4;font-size:11px;text-transform:uppercase}th:nth-child(n+2),td:nth-child(n+2){text-align:right}'+
-      '.tot{margin-left:auto;width:260px;margin-top:12px}.tot div{display:flex;justify-content:space-between;padding:4px 0}'+
-      '.tot .g{font-size:16px;font-weight:bold;border-top:2px solid #111;padding-top:8px;margin-top:4px}'+
-      '.obs{margin-top:18px;color:#444}.foot{margin-top:24px;color:#999;font-size:11px;text-align:center}'+
-      '@media print{.bar{display:none}}'+
-      '</style></head><body>'+
+      ':root{--ink:#1A2B27;--muted:#6E7A77;--line:#D9E2DF;--esc:#0F766E;--esc-d:#0B4A45;--orange:#E8620A}'+
+      "*{box-sizing:border-box}body{margin:0;background:#E7E7E3;color:var(--ink);font-family:Barlow,system-ui,sans-serif;-webkit-font-smoothing:antialiased}"+
+      '.wrap{max-width:780px;margin:0 auto;padding:18px}'+
+      '.bar{display:flex;justify-content:flex-end;margin-bottom:14px}'+
+      '.bar button{border:none;border-radius:9px;padding:11px 18px;background:var(--esc);color:#fff;font-family:Barlow;font-size:14px;font-weight:700;cursor:pointer}'+
+      '.doc{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 4px 22px rgba(0,0,0,.08)}'+
+      '.docpad{padding:30px 34px 26px}@media(max-width:560px){.docpad{padding:22px 18px}}'+
+      '.top{display:flex;align-items:flex-start;gap:16px;justify-content:space-between}'+
+      '.logo .nm{font-weight:900;font-size:22px;letter-spacing:.01em;line-height:1}'+
+      ".logo .sb{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--muted);margin-top:5px}"+
+      '.cotbig{text-align:right}.cotbig .h{font-size:26px;font-weight:900;color:var(--esc);line-height:1}'+
+      ".cotbig .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:8px;line-height:1.7}"+
+      '.para{margin-top:24px;display:flex;gap:30px;flex-wrap:wrap;font-size:13px}'+
+      ".para .k{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}"+
+      '.para .v{font-weight:600;margin-top:2px}'+
+      'table{width:100%;border-collapse:collapse;font-size:13px;margin-top:22px}'+
+      "thead th{background:var(--esc);color:#fff;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:11px 12px;text-align:left}"+
+      'thead th.r{text-align:right}tbody td{padding:12px;border-bottom:1px solid #EEF3F1}'+
+      "tbody td.r{text-align:right;font-family:'JetBrains Mono',monospace}"+
+      '.tots{margin-top:14px;margin-left:auto;width:300px;max-width:100%}'+
+      '.tots .tr{display:flex;justify-content:space-between;padding:8px 12px;font-size:13.5px}'+
+      ".tots .mono{font-family:'JetBrains Mono',monospace;font-weight:600}"+
+      '.tots .sub{background:#F4F8F7;border-radius:8px}'+
+      '.tots .grand{background:var(--esc);color:#fff;border-radius:8px;font-weight:800;font-size:16px;margin-top:4px}'+
+      ".cond{margin-top:18px;border-top:1px dashed var(--line);padding-top:12px;font-size:11px;color:var(--muted);line-height:1.6;font-family:'JetBrains Mono',monospace}"+
+      '.foot{margin-top:22px;border-top:2px solid var(--esc);padding-top:12px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--esc-d)}'+
+      '@media print{body{background:#fff}.bar{display:none}.doc{box-shadow:none;border:none;border-radius:0}.wrap{padding:0;max-width:none}}'+
+      '</style></head><body><div class="wrap">'+
       '<div class="bar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>'+
-      '<div class="head"><div class="emp">'+
-        (g.logo_url?'<img src="'+esc(g.logo_url)+'" style="max-height:54px;margin-bottom:6px"><br>':'')+
-        '<h1>'+esc(g.nombre||'Empresa')+'</h1>'+
-        (g.nit?'<p>NIT: '+esc(g.nit)+'</p>':'')+
-        (g.direccion?'<p>'+esc(g.direccion)+'</p>':'')+
-        (g.telefono?'<p>Tel: '+esc(g.telefono)+'</p>':'')+
-        (g.correo?'<p>'+esc(g.correo)+'</p>':'')+
-      '</div><div class="doc"><h2>COTIZACION</h2><p><b>'+esc(st.numero||'')+'</b></p>'+
-        (st.fecha?'<p>Fecha: '+esc(st.fecha)+'</p>':'')+
-        (st.valida_hasta?'<p>Valida hasta: '+esc(st.valida_hasta)+'</p>':'')+
-        '<span class="badge">'+estadoTxt+'</span></div></div>'+
-      '<div class="parts"><div class="part"><h3>Cliente</h3><p>'+esc(cliente||'-')+'</p></div>'+
-        '<div class="part"><h3>Obra</h3><p>'+esc(st.obra||'-')+'</p></div></div>'+
-      '<table><thead><tr><th>Descripcion</th><th>Cant.</th><th>V. Unit</th><th>Total</th></tr></thead>'+
-        '<tbody>'+(filas||'<tr><td colspan="4">Sin lineas</td></tr>')+'</tbody></table>'+
-      '<div class="tot"><div><span>Subtotal</span><span>'+money(sub)+'</span></div>'+
-        '<div><span>IVA (19%)</span><span>'+money(iva)+'</span></div>'+
-        '<div class="g"><span>Total</span><span>'+money(total)+'</span></div></div>'+
-      (st.observaciones?'<div class="obs"><b>Observaciones:</b> '+esc(st.observaciones)+'</div>':'')+
-      '<div class="foot">Generado por RCD Pro</div>'+
-      '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>'+
+      '<div class="doc"><div class="docpad">'+
+        '<div class="top"><div class="logo">'+
+          (g.logo_url?'<img src="'+esc(g.logo_url)+'" style="max-height:56px">':('<div class="nm">'+esc(g.nombre||'Empresa')+'</div>'+(g.nit?'<div class="sb">NIT '+esc(g.nit)+'</div>':'')))+
+        '</div><div class="cotbig"><div class="h">COTIZACION</div><div class="meta">N.&ordm; '+esc(st.numero||'')+
+          (st.fecha?'<br>'+esc(st.fecha):'')+
+          (st.valida_hasta?'<br>Valida hasta '+esc(st.valida_hasta):'')+
+          '<br>'+estadoTxt+'</div></div></div>'+
+        '<div class="para">'+
+          '<div><div class="k">Cliente</div><div class="v">'+esc(cliente||'-')+'</div></div>'+
+          '<div><div class="k">Obra</div><div class="v">'+esc(st.obra||'-')+'</div></div>'+
+        '</div>'+
+        '<table><thead><tr><th>Descripcion</th><th class="r">Cantidad</th><th class="r">Vr. unit</th><th class="r">Total</th></tr></thead>'+
+          '<tbody>'+(filas||'<tr><td colspan="4">Sin lineas</td></tr>')+'</tbody></table>'+
+        '<div class="tots">'+
+          '<div class="tr sub"><span>Subtotal</span><span class="mono">'+money(sub)+'</span></div>'+
+          '<div class="tr"><span>IVA (19%)</span><span class="mono">'+money(iva)+'</span></div>'+
+          '<div class="tr grand"><span>TOTAL</span><span class="mono">'+money(total)+'</span></div>'+
+        '</div>'+
+        (st.observaciones?'<div class="cond"><b>Observaciones:</b> '+esc(st.observaciones)+'</div>':'')+
+        '<div class="cond">Gestion de RCD conforme a la Res. 0472/2017 y 1257/2021. El valor se ajusta a la cantidad realmente recibida en bascula.</div>'+
+        '<div class="foot">'+
+          (g.telefono?'<span>Tel: '+esc(g.telefono)+'</span>':'')+
+          (g.correo?'<span>'+esc(g.correo)+'</span>':'')+
+          (g.direccion?'<span>'+esc(g.direccion)+'</span>':'')+
+        '</div>'+
+      '</div></div></div>'+
+      '<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script>'+
       '</body></html>';
     w.document.open(); w.document.write(html); w.document.close();
   }
