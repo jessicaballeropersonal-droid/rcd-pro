@@ -23,19 +23,21 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
       '<p class="lead">Cada linea es un item de la lista o transporte. Al aceptar una cotizacion se habilita la obra.</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNueva">+ Nueva cotizacion</button></div>':'')+
       (cs.length?
-        '<table class="mtable"><tr><th>N.º</th><th>Cliente / obra</th><th>Fecha</th><th style="text-align:right">Total</th><th>Estado</th><th></th></tr>'+
+        '<table class="mtable"><tr><th>N.º</th><th>Cliente / obra</th><th>Fecha</th><th style="text-align:right">Total</th><th></th></tr>'+
         cs.map((c,i)=>'<tr><td class="mono"><b>'+esc(c.numero||'')+'</b></td>'+
           '<td>'+esc(c.cliente||'')+'<br><span style="font-size:12px;color:var(--muted)">'+esc(c.obra||'')+'</span></td>'+
           '<td class="mono">'+esc(c.fecha||'')+'</td>'+
           '<td style="text-align:right" class="mono">'+money(c.total)+'</td>'+
-          '<td>'+badgeEstado(c.estado)+'</td>'+
-          '<td><div class="rowbtns"><button class="btn ghost sm" data-open="'+i+'">Abrir</button>'+
+          '<td><div class="rowbtns" style="align-items:center">'+badgeEstado(c.estado)+
+          '<button class="btn ghost sm" data-open="'+i+'">Abrir</button>'+
+          '<button class="btn ghost sm" data-pdf="'+i+'" title="Ver PDF">PDF</button>'+
           (pEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'')+
           '</div></td></tr>').join('')+'</table>'
         : '<div class="empty">Aun no hay cotizaciones.</div>')+
       '</div>';
     if(pCrear) el.querySelector('#bNueva').onclick=()=>abrirEditor(null);
     el.querySelectorAll('[data-open]').forEach(b=>{const i=+b.dataset.open; b.onclick=()=>abrirEditor(cs[i].id);});
+    el.querySelectorAll('[data-pdf]').forEach(b=>{const i=+b.dataset.pdf; b.onclick=()=>pdfDeId(cs[i].id);});
     el.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anular(cs[i]);});
   }
 
@@ -143,26 +145,20 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     const r=box.querySelector('#bRechazar'); if(r) r.onclick=()=>cambiarEstado(st,'rechazada');
   }
 
-  async function verPDF(st){
-    const w=window.open('','_blank');
-    if(!w){ ctx.toast('Permite las ventanas emergentes para ver el PDF.','error'); return; }
-    w.document.write('<p style="font-family:Arial;padding:24px">Generando PDF...</p>');
-    let g={}; try{ const r=await ctx.rpc('rcd_gestor',{p_gestor_id:ctx.ses.gestor_id}); g=(Array.isArray(r)?r[0]:r)||{}; }catch(e){}
+  function buildCotHTML(d, g){
     let sub=0, iva=0;
-    st.lineas.forEach(l=>{ const lt=(+l.cantidad||0)*(+l.precio_unit||0); sub+=lt; if(l.aplica_iva) iva+=lt*0.19; });
+    (d.lineas||[]).forEach(l=>{ const lt=(+l.cantidad||0)*(+l.precio_unit||0); sub+=lt; if(l.aplica_iva) iva+=lt*0.19; });
     const total=sub+iva;
-    const cliente = st.cliente_nombre || ((st.clientes.find(c=>c.id===st.cliente_id)||{}).razon_social) || '';
-    const filas = st.lineas.map(l=>{
-      const lt=(+l.cantidad||0)*(+l.precio_unit||0);
-      return '<tr><td>'+esc(l.descripcion||'')+'</td><td class="r">'+numEs(l.cantidad||0)+'</td><td class="r">'+money(l.precio_unit)+'</td><td class="r">'+money(lt)+'</td></tr>';
-    }).join('');
-    const estadoTxt = st.estado==='aceptada'?'ACEPTADA':(st.estado==='rechazada'?'RECHAZADA':'BORRADOR');
-    const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+    const filas=(d.lineas||[]).map(l=>{ const lt=(+l.cantidad||0)*(+l.precio_unit||0);
+      return '<tr><td>'+esc(l.descripcion||'')+'</td><td class="r">'+numEs(l.cantidad||0)+'</td><td class="r">'+money(l.precio_unit)+'</td><td class="r">'+money(lt)+'</td></tr>'; }).join('');
+    const estadoTxt = d.estado==='aceptada'?'ACEPTADA':(d.estado==='rechazada'?'RECHAZADA':'BORRADOR');
+    return '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
       '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'+
       '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">'+
-      '<title>Cotizacion '+esc(st.numero||'')+'</title><style>'+
+      '<title>Cotizacion '+esc(d.numero||'')+'</title><style>'+
       ':root{--ink:#1A2B27;--muted:#6E7A77;--line:#D9E2DF;--esc:#0F766E;--esc-d:#0B4A45;--orange:#E8620A}'+
-      "*{box-sizing:border-box}body{margin:0;background:#E7E7E3;color:var(--ink);font-family:Barlow,system-ui,sans-serif;-webkit-font-smoothing:antialiased}"+
+      '*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+      "body{margin:0;background:#E7E7E3;color:var(--ink);font-family:Barlow,system-ui,sans-serif;-webkit-font-smoothing:antialiased}"+
       '.wrap{max-width:780px;margin:0 auto;padding:18px}'+
       '.bar{display:flex;justify-content:flex-end;margin-bottom:14px}'+
       '.bar button{border:none;border-radius:9px;padding:11px 18px;background:var(--esc);color:#fff;font-family:Barlow;font-size:14px;font-weight:700;cursor:pointer}'+
@@ -187,19 +183,20 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
       '.tots .grand{background:var(--esc);color:#fff;border-radius:8px;font-weight:800;font-size:16px;margin-top:4px}'+
       ".cond{margin-top:18px;border-top:1px dashed var(--line);padding-top:12px;font-size:11px;color:var(--muted);line-height:1.6;font-family:'JetBrains Mono',monospace}"+
       '.foot{margin-top:22px;border-top:2px solid var(--esc);padding-top:12px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--esc-d)}'+
+      '@page{size:A4;margin:12mm}'+
       '@media print{body{background:#fff}.bar{display:none}.doc{box-shadow:none;border:none;border-radius:0}.wrap{padding:0;max-width:none}}'+
       '</style></head><body><div class="wrap">'+
       '<div class="bar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>'+
       '<div class="doc"><div class="docpad">'+
         '<div class="top"><div class="logo">'+
           (g.logo_url?'<img src="'+esc(g.logo_url)+'" style="max-height:56px">':('<div class="nm">'+esc(g.nombre||'Empresa')+'</div>'+(g.nit?'<div class="sb">NIT '+esc(g.nit)+'</div>':'')))+
-        '</div><div class="cotbig"><div class="h">COTIZACION</div><div class="meta">N.&ordm; '+esc(st.numero||'')+
-          (st.fecha?'<br>'+esc(st.fecha):'')+
-          (st.valida_hasta?'<br>Valida hasta '+esc(st.valida_hasta):'')+
+        '</div><div class="cotbig"><div class="h">COTIZACION</div><div class="meta">N.&ordm; '+esc(d.numero||'')+
+          (d.fecha?'<br>'+esc(d.fecha):'')+
+          (d.valida_hasta?'<br>Valida hasta '+esc(d.valida_hasta):'')+
           '<br>'+estadoTxt+'</div></div></div>'+
         '<div class="para">'+
-          '<div><div class="k">Cliente</div><div class="v">'+esc(cliente||'-')+'</div></div>'+
-          '<div><div class="k">Obra</div><div class="v">'+esc(st.obra||'-')+'</div></div>'+
+          '<div><div class="k">Cliente</div><div class="v">'+esc(d.cliente||'-')+'</div></div>'+
+          '<div><div class="k">Obra</div><div class="v">'+esc(d.obra||'-')+'</div></div>'+
         '</div>'+
         '<table><thead><tr><th>Descripcion</th><th class="r">Cantidad</th><th class="r">Vr. unit</th><th class="r">Total</th></tr></thead>'+
           '<tbody>'+(filas||'<tr><td colspan="4">Sin lineas</td></tr>')+'</tbody></table>'+
@@ -208,17 +205,42 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
           '<div class="tr"><span>IVA (19%)</span><span class="mono">'+money(iva)+'</span></div>'+
           '<div class="tr grand"><span>TOTAL</span><span class="mono">'+money(total)+'</span></div>'+
         '</div>'+
-        (st.observaciones?'<div class="cond"><b>Observaciones:</b> '+esc(st.observaciones)+'</div>':'')+
-        '<div class="cond">Gestion de RCD conforme a la Res. 0472/2017 y 1257/2021. El valor se ajusta a la cantidad realmente recibida en bascula.</div>'+
+        (d.observaciones?'<div class="cond"><b>Observaciones:</b> '+esc(d.observaciones)+'</div>':'')+
         '<div class="foot">'+
           (g.telefono?'<span>Tel: '+esc(g.telefono)+'</span>':'')+
           (g.correo?'<span>'+esc(g.correo)+'</span>':'')+
           (g.direccion?'<span>'+esc(g.direccion)+'</span>':'')+
         '</div>'+
       '</div></div></div>'+
-      '<script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script>'+
+      '<script>function go(){setTimeout(function(){window.print();},250);}if(document.fonts&&document.fonts.ready){document.fonts.ready.then(go);}else{window.onload=function(){setTimeout(go,500);};}<\/script>'+
       '</body></html>';
-    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  async function abrirPDF(d){
+    const w=window.open('','_blank');
+    if(!w){ ctx.toast('Permite las ventanas emergentes para ver el PDF.','error'); return; }
+    w.document.write('<p style="font-family:Arial;padding:24px">Generando PDF...</p>');
+    let g={}; try{ const r=await ctx.rpc('rcd_gestor',{p_gestor_id:ctx.ses.gestor_id}); g=(Array.isArray(r)?r[0]:r)||{}; }catch(e){}
+    w.document.open(); w.document.write(buildCotHTML(d,g)); w.document.close();
+  }
+
+  function verPDF(st){
+    abrirPDF({ numero:st.numero, fecha:st.fecha, valida_hasta:st.valida_hasta, estado:st.estado,
+      cliente: st.cliente_nombre || ((st.clientes.find(c=>c.id===st.cliente_id)||{}).razon_social) || '',
+      obra:st.obra, observaciones:st.observaciones, lineas:st.lineas });
+  }
+
+  async function pdfDeId(cotId){
+    const w=window.open('','_blank');
+    if(!w){ ctx.toast('Permite las ventanas emergentes para ver el PDF.','error'); return; }
+    w.document.write('<p style="font-family:Arial;padding:24px">Generando PDF...</p>');
+    let cab={}, lineas=[], g={};
+    try{ const r=await ctx.rpc('rcd_cotizacion_get',{p_id:cotId}); cab=(Array.isArray(r)?r[0]:r)||{}; }catch(e){}
+    try{ const r=await ctx.rpc('rcd_cotizacion_lineas_get',{p_cotizacion_id:cotId}); lineas=Array.isArray(r)?r:[]; }catch(e){}
+    try{ const r=await ctx.rpc('rcd_gestor',{p_gestor_id:ctx.ses.gestor_id}); g=(Array.isArray(r)?r[0]:r)||{}; }catch(e){}
+    const d={ numero:cab.numero, fecha:cab.fecha, valida_hasta:cab.valida_hasta, estado:cab.estado,
+      cliente:cab.cliente, obra:cab.obra, observaciones:cab.observaciones, lineas:lineas };
+    w.document.open(); w.document.write(buildCotHTML(d,g)); w.document.close();
   }
 
   // ---- lineas ----
