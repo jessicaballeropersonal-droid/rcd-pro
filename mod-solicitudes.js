@@ -135,7 +135,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
           p_cantidad:parseNum(inpCant.value), p_fecha:v(el,'s_fecha')||null, p_observaciones:v(el,'s_obs'),
           p_tamano_id:el.querySelector('#s_tam').value||null}));
         if(r==='OK'){ ctx.toast('Solicitud guardada'); lista(); return; }
-        ctx.toast(r==='OBRA_NO_COTIZADA'?'Esa obra no tiene cotizacion aceptada.':(r==='PRODUCTO_VACIO'?'Selecciona el producto.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.')),'error');
+        ctx.toast(r==='SALDO_AGOTADO'?'Obra bloqueada: el anticipo se agoto. Registra un abono o pide al administrador desbloquear en Facturacion.':(r==='OBRA_NO_COTIZADA'?'Esa obra no tiene cotizacion aceptada.':(r==='PRODUCTO_VACIO'?'Selecciona el producto.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.'))),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Guardar';
     };
