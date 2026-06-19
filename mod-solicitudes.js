@@ -25,11 +25,12 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       '<p class="lead">Se crean sobre obras con cotizacion aceptada. Cada solicitud declara una cantidad (parcial del total de la obra).</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNueva">+ Nueva solicitud</button></div>':'')+
       (ss.length?
-        '<table class="mtable"><tr><th>N.º</th><th>Cliente / obra</th><th>Cotizacion</th><th>Tipo</th><th>Detalle</th><th style="text-align:right">Declarado (t)</th><th>Fecha</th><th>Origen</th><th>Estado</th><th></th></tr>'+
+        '<table class="mtable"><tr><th>N.º</th><th>Cliente / obra</th><th>Cotizacion</th><th>Tipo</th><th>Transporte</th><th>Detalle</th><th style="text-align:right">Declarado (t)</th><th>Fecha</th><th>Origen</th><th>Estado</th><th></th></tr>'+
         ss.map((s,i)=>'<tr><td class="mono"><b>'+esc(s.numero||'')+'</b></td>'+
           '<td>'+esc(s.cliente||'')+'<br><span style="font-size:12px;color:var(--muted)">'+esc(s.obra||'')+'</span></td>'+
           '<td class="mono">'+(s.cot_numero?'<b>'+esc(s.cot_numero)+'</b>':'<span class="badge danger">sin cotiz.</span>')+'</td>'+
           '<td>'+badgeTipo(s.tipo)+'</td>'+
+          '<td>'+(s.transporte==='cliente'?'<span class="badge off">Cliente</span>':'<span class="badge ok">Nosotros</span>')+'</td>'+
           '<td>'+(s.tipo==='despacho'?esc(s.producto||''):'RCD')+'</td>'+
           '<td style="text-align:right" class="mono">'+numEs(s.cantidad_declarada)+'</td>'+
           '<td class="mono">'+esc(s.fecha||'')+'</td>'+
@@ -85,6 +86,10 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
         '</select></div>'+
         '<div class="field"><label>Fecha</label><input type="date" id="s_fecha" value="'+(nuevo?'':esc(s.fecha||''))+'"></div>'+
       '</div>'+
+      '<div class="field"><label>Transporte</label><select id="s_transp">'+
+        '<option value="nosotros"'+(nuevo||s.transporte!=='cliente'?' selected':'')+'>Nosotros transportamos (cobra transporte)</option>'+
+        '<option value="cliente"'+(!nuevo&&s.transporte==='cliente'?' selected':'')+'>Cliente envia sus volquetas (sin cobro de transporte)</option>'+
+      '</select><div class="note">Aplica a recepcion y despacho. Si el cliente envia sus volquetas, se generan ordenes igual pero no se cobra transporte ni se paga volquetero.</div></div>'+
       '<div class="field" id="s_prodwrap" style="display:none"><label>Producto</label><select id="s_prod"><option value="">Selecciona...</option>'+
         productos.map(p=>'<option value="'+p.id+'">'+esc(p.nombre)+'</option>').join('')+
       '</select></div>'+
@@ -134,7 +139,8 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
           p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:nuevo?null:s.id,
           p_obra_id:selObra.value, p_tipo:tipo, p_producto_id:(tipo==='despacho'?selProd.value:null),
           p_cantidad:parseNum(inpCant.value), p_fecha:v(el,'s_fecha')||null, p_observaciones:v(el,'s_obs'),
-          p_tamano_id:el.querySelector('#s_tam').value||null}));
+          p_tamano_id:el.querySelector('#s_tam').value||null,
+          p_transporte:el.querySelector('#s_transp').value||'nosotros'}));
         if(r==='OK'){ ctx.toast('Solicitud guardada'); lista(); return; }
         ctx.toast(r==='SALDO_AGOTADO'?'Obra bloqueada: el anticipo se agoto. Registra un abono o pide al administrador desbloquear en Facturacion.':(r==='OBRA_NO_COTIZADA'?'Esa obra no tiene cotizacion aceptada.':(r==='PRODUCTO_VACIO'?'Selecciona el producto.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.'))),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
