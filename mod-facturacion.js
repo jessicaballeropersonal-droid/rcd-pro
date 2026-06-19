@@ -51,32 +51,66 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
     const box=el.querySelector('#antDet'); if(!box||!obraSel) return;
     box.innerHTML='<div class="mcard"><div class="loading">Cargando...</div></div>';
     let abonos=[]; try{ const r=await ctx.rpc('rcd_anticipos_lista',{p_obra_id:obraSel.obra_id}); abonos=Array.isArray(r)?r:[]; }catch(e){}
+    let vig=null; try{ vig=row1(await ctx.rpc('rcd_obra_cotizacion_vigente',{p_gestor_id:ctx.ses.gestor_id,p_obra_id:obraSel.obra_id})); }catch(e){}
     const blq=obraSel.bloqueada;
+    const modalidad=obraSel.modalidad||'anticipo';
+    const cupo=+obraSel.cupo_credito||0;
+    const disponible=(+obraSel.saldo||0)+(modalidad==='credito'?cupo:0);
     box.innerHTML='<div class="mcard">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
         '<h3 style="margin:0">'+esc(obraSel.obra)+' · '+esc(obraSel.cliente||'')+'</h3>'+
-        '<div style="display:flex;gap:6px">'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (pCrear?'<button class="btn primary sm" id="aAdd">Registrar abono</button>':'')+
+          (esAdmin?'<button class="btn ghost sm" id="aCred">Configurar credito</button>':'')+
           (blq&&esAdmin?'<button class="btn sm" id="aUnlock" style="background:var(--orange);color:#fff;border:none">Desbloquear (admin)</button>':'')+
         '</div>'+
       '</div>'+
-      (blq?'<div class="note warn" style="background:#FBE6E3;border-color:#F1C9C4;color:#A02114"><b>Obra bloqueada.</b> El consumo alcanzo o supero el anticipo. No se pueden crear ordenes nuevas hasta un nuevo abono'+(esAdmin?' o desbloqueo.':' o que el administrador desbloquee.')+'</div>':'')+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 2px">'+
+        '<span class="badge '+(modalidad==='credito'?'warn':'off')+'">'+(modalidad==='credito'?('Credito · cupo '+money(cupo)):'Anticipo')+'</span>'+
+        (vig?'<span class="badge off">Cotizacion vigente: '+esc(vig.numero||'')+' ('+esc(vig.fecha||'')+')</span>':'<span class="badge danger">Sin cotizacion aceptada</span>')+
+      '</div>'+
+      (blq?'<div class="note warn" style="background:#FBE6E3;border-color:#F1C9C4;color:#A02114"><b>Obra bloqueada.</b> '+(modalidad==='credito'?'Se alcanzo el cupo de credito.':'El consumo alcanzo o supero el anticipo.')+' No se pueden crear ordenes nuevas hasta un nuevo abono'+(esAdmin?', ampliar cupo o desbloqueo.':' o que el administrador autorice.')+'</div>':'')+
       '<div class="row2" style="margin:10px 0">'+
         '<div style="background:#F4F8F7;border-radius:10px;padding:10px"><span style="font-size:12px;color:var(--muted)">Abonado</span><br><span class="mono" style="font-size:17px;font-weight:800">'+money(obraSel.abonado)+'</span></div>'+
-        '<div style="background:'+((+obraSel.saldo)<0?'#FBE6E3':'var(--esc)')+';color:'+((+obraSel.saldo)<0?'#A02114':'#fff')+';border-radius:10px;padding:10px"><span style="font-size:12px;opacity:.85">Saldo disponible</span><br><span class="mono" style="font-size:17px;font-weight:800">'+money(obraSel.saldo)+'</span></div>'+
+        '<div style="background:'+(disponible<=0?'#FBE6E3':'var(--esc)')+';color:'+(disponible<=0?'#A02114':'#fff')+';border-radius:10px;padding:10px"><span style="font-size:12px;opacity:.85">'+(modalidad==='credito'?'Disponible (saldo+cupo)':'Saldo disponible')+'</span><br><span class="mono" style="font-size:17px;font-weight:800">'+money(disponible)+'</span></div>'+
       '</div>'+
-      '<div id="aForm"></div>'+
+      '<div id="aForm"></div><div id="cForm"></div>'+
       '<h3 style="margin:6px 0 0">Abonos</h3>'+
       (abonos.length?'<table class="mtable"><tr><th>Fecha</th><th style="text-align:right">Monto</th><th>Factura</th>'+(pCrear?'<th></th>':'')+'</tr>'+
         abonos.map(a=>'<tr><td class="mono">'+esc(a.fecha||'')+'</td><td style="text-align:right" class="mono">'+money(a.monto)+'</td>'+
           '<td>'+(a.con_factura?'<span class="badge ok">'+esc(a.factura_ref||'con factura')+'</span>':'<span class="badge off">sin factura</span>')+'</td>'+
           (pCrear?'<td><button class="btn ghost sm" data-anu="'+a.id+'">Anular</button></td>':'')+'</tr>').join('')+'</table>'
         :'<div class="empty">Sin abonos registrados.</div>')+
-      '<div class="note">Consumido a la fecha: <b>'+money(obraSel.consumido)+'</b> (ordenes a precio de cotizacion, con IVA).</div>'+
+      '<div class="note">Saldo: '+money(obraSel.saldo)+' · Consumido a la fecha: <b>'+money(obraSel.consumido)+'</b> (ordenes a precio de cotizacion, con IVA).</div>'+
       '</div>';
     const add=box.querySelector('#aAdd'); if(add) add.onclick=abonoForm;
+    const cr=box.querySelector('#aCred'); if(cr) cr.onclick=()=>creditoForm(modalidad,cupo);
     const unl=box.querySelector('#aUnlock'); if(unl) unl.onclick=desbloquear;
     box.querySelectorAll('[data-anu]').forEach(b=>b.onclick=()=>anularAbono(b.dataset.anu));
+  }
+
+  function creditoForm(modActual,cupoActual){
+    const f=el.querySelector('#cForm'); if(!f) return;
+    f.innerHTML='<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin:8px 0">'+
+      '<div style="font-weight:700;margin-bottom:8px">Modalidad de la obra</div>'+
+      '<div class="row2"><div class="field"><label>Modalidad</label><select id="cr_mod">'+
+        '<option value="anticipo"'+(modActual!=='credito'?' selected':'')+'>Anticipo (bloquea en 0)</option>'+
+        '<option value="credito"'+(modActual==='credito'?' selected':'')+'>Credito (opera hasta el cupo)</option></select></div>'+
+      '<div class="field"><label>Cupo de credito</label><input id="cr_cupo" inputmode="decimal" value="'+(cupoActual||0)+'"></div></div>'+
+      '<div class="note">En Credito la obra puede operar sin anticipo hasta deber el cupo. Al llegar al cupo se bloquea (el admin puede ampliarlo o desbloquear).</div>'+
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary sm" id="cr_save">Guardar</button><button class="btn ghost sm" id="cr_cancel">Cancelar</button></div>'+
+      '</div>';
+    f.querySelector('#cr_cancel').onclick=()=>{ f.innerHTML=''; };
+    f.querySelector('#cr_save').onclick=async()=>{
+      const mod=v(el,'cr_mod'); const cupo=parseNum(v(el,'cr_cupo'))||0;
+      const btn=f.querySelector('#cr_save'); btn.disabled=true; btn.textContent='Guardando...';
+      try{ const r=scalar(await ctx.rpc('rcd_obra_credito_set',{p_usuario_id:ctx.ses.id,p_obra_id:obraSel.obra_id,p_modalidad:mod,p_cupo:cupo}));
+        if(r==='OK'){ ctx.toast('Modalidad actualizada'); antView(); return; }
+        else if(r==='SOLO_ADMIN'){ ctx.toast('Solo el administrador puede configurar credito.','error'); }
+        else ctx.toast('No se pudo.','error');
+      }catch(e){ ctx.toast('Error.','error'); }
+      btn.disabled=false; btn.textContent='Guardar';
+    };
   }
 
   function abonoForm(){
