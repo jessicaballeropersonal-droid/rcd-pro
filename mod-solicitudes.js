@@ -25,7 +25,8 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       '<p class="lead">Se crean sobre obras con cotizacion aceptada. Cada solicitud declara una cantidad (parcial del total de la obra).</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNueva">+ Nueva solicitud</button></div>':'')+
       (ss.length?
-        '<table class="mtable"><tr><th>N.º</th><th>Cliente / obra</th><th>Cotizacion</th><th>Tipo</th><th>Transporte</th><th>Detalle</th><th style="text-align:right">Declarado (t)</th><th>Fecha</th><th>Origen</th><th>Estado</th><th></th></tr>'+
+        '<div style="overflow-x:auto;width:100%">'+
+        '<table class="mtable" style="min-width:1040px"><tr><th>N.º</th><th>Cliente / obra</th><th>Cotizacion</th><th>Tipo</th><th>Transporte</th><th>Detalle</th><th style="text-align:right">Declarado (t)</th><th>Fecha</th><th>Origen</th><th>Estado</th><th></th></tr>'+
         ss.map((s,i)=>'<tr><td class="mono"><b>'+esc(s.numero||'')+'</b></td>'+
           '<td>'+esc(s.cliente||'')+'<br><span style="font-size:12px;color:var(--muted)">'+esc(s.obra||'')+'</span></td>'+
           '<td class="mono">'+(s.cot_numero?'<b>'+esc(s.cot_numero)+'</b>':'<span class="badge danger">sin cotiz.</span>')+'</td>'+
@@ -41,7 +42,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
           (s.estado==='aprobada'?'<button class="btn ghost sm" data-ord="'+i+'">Ordenes</button>':'')+
           (pEditar?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
           (pEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'')+
-          '</div></td></tr>').join('')+'</table>'
+          '</div></td></tr>').join('')+'</table></div>'
         : '<div class="empty">Aun no hay solicitudes.</div>')+
       '</div>';
     if(pCrear) el.querySelector('#bNueva').onclick=()=>form(null,ss);
