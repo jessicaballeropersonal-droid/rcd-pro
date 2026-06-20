@@ -20,7 +20,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
     el.innerHTML='<div class="loading">Cargando...</div>';
     let ss=[]; try{ const r=await ctx.rpc('rcd_solicitudes_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) ss=r; }catch(e){}
     el.innerHTML=
-      '<div class="mcard" style="max-width:1000px">'+
+      '<div class="mcard" style="max-width:none">'+
       '<h3 style="margin-top:0">Solicitudes y ordenes</h3>'+
       '<p class="lead">Se crean sobre obras con cotizacion aceptada. Cada solicitud declara una cantidad (parcial del total de la obra).</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNueva">+ Nueva solicitud</button></div>':'')+
