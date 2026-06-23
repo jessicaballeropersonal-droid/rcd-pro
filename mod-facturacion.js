@@ -211,7 +211,9 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
         '</tr>').join('')+
       '</table></div></div>'+
       '<div class="mcard"><h3 style="margin:0 0 4px">Clientes → tercero en TNS</h3>'+
-      '<div class="note">Los clientes se emparejan/crean automaticamente al facturar (por NIT). No hay que hacer nada aqui.</div></div>';
+      '<div class="note">Trae tus clientes de TNS (con su codigo, NIT y ciudad). Se emparejan por NIT con los de RCD Pro: si existe se actualiza, si no se crea.</div>'+
+      (pCrear?'<div style="margin-top:8px"><button class="btn ghost sm" id="bTraerCli">Traer clientes de TNS</button></div>':'')+
+      '<div id="cliRes" class="note" style="display:none;margin-top:10px"></div></div>';
 
     function inp(cls,i){ return bd.querySelector('.'+cls+'[data-i="'+i+'"]'); }
     async function guardar(i){
@@ -242,6 +244,27 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
         ctx.toast(r&&r.error==='SIN_CREDENCIALES'?'Primero conecta TNS en Configuracion.':('TNS: '+((r&&r.error)||'error')),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Traer materiales de TNS';
+    };
+
+    const tc=bd.querySelector('#bTraerCli'); if(tc) tc.onclick=async function(){
+      const btn=this, box=bd.querySelector('#cliRes'); btn.disabled=true; btn.textContent='Trayendo...';
+      try{
+        const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({accion:'traer_clientes',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,filtro:''})}).then(x=>x.json());
+        if(!(r&&r.ok)){ ctx.toast(r&&r.error==='SIN_CREDENCIALES'?'Primero conecta TNS en Configuracion.':('TNS: '+((r&&r.error)||'error')),'error'); btn.disabled=false; btn.textContent='Traer clientes de TNS'; return; }
+        const cli=r.clientes||[];
+        if(!cli.length){ if(box){box.style.display='block'; box.className='note warn'; box.textContent='TNS no devolvio clientes (puede pedir un filtro de busqueda).';} btn.disabled=false; btn.textContent='Traer clientes de TNS'; return; }
+        btn.textContent='Importando '+cli.length+'...';
+        const imp=scalar(await ctx.rpc('rcd_tns_clientes_importar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_clientes:cli}));
+        if(typeof imp==='string' && imp.indexOf('OK:')===0){
+          const p=imp.split(':'); const creados=p[1]||'0', actualizados=p[2]||'0';
+          ctx.log('Facturacion TNS','Clientes importados', cli.length+' (nuevos '+creados+', actualizados '+actualizados+')');
+          if(box){ box.style.display='block'; box.className='note'; box.textContent='Importados: '+cli.length+' clientes ('+creados+' nuevos, '+actualizados+' actualizados).'; }
+          ctx.toast('Clientes importados de TNS');
+        } else if(imp==='SOLO_ADMIN'){ ctx.toast('Solo el administrador.','error'); }
+        else ctx.toast('No se pudieron importar.','error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Traer clientes de TNS';
     };
   }
 
