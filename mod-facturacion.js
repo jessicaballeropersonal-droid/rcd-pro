@@ -251,6 +251,7 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       return await r.json();
     }
     function errMsg(e){
+      if(e && typeof e==='object'){ e = e.message ? (e.message+(e.code?' ['+e.code+']':'')) : JSON.stringify(e); }
       return ({SOLO_ADMIN:'Solo el administrador puede configurar.',SIN_CREDENCIALES:'Primero guarda las credenciales.',
         LLAVE_INVALIDA:'Falta configurar la llave de cifrado en el servidor.',NO_DESCIFRA:'No se pudieron leer las credenciales.',
         NO_CONECTA_TNS:'No se pudo conectar con TNS (revisa la URL o tu internet).',FALTA_GESTOR:'Error de sesion.'})[e] || ('TNS: '+(e||'error'));
