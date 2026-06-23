@@ -252,6 +252,9 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       '<div class="field"><label>Forma de pago por defecto</label><select id="cf_fp">'+
         '<option value="CO"'+((c.cod_forma_pago_def||'CO')==='CO'?' selected':'')+'>Contado (CO)</option>'+
         '<option value="CR"'+(c.cod_forma_pago_def==='CR'?' selected':'')+'>Credito (CR)</option></select></div></div>'+
+      '<div class="note" style="margin-top:6px">Codigos de articulo TNS para los servicios que no son producto (los configuras en TNS y aqui pones su codigo):</div>'+
+      '<div class="row2"><div class="field"><label>Cod. articulo Disposicion</label><input id="cf_disp" class="mono" value="'+esc(c.cod_disposicion||'')+'" placeholder="cod. TNS"></div>'+
+      '<div class="field"><label>Cod. articulo Transporte</label><input id="cf_tra" class="mono" value="'+esc(c.cod_transporte||'')+'" placeholder="cod. TNS"></div></div>'+
       (pCrear?'<div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost sm" id="cf_datossave">Guardar datos</button><button class="btn primary sm" id="cf_test">Probar conexion</button></div>':'')+
       '</div>';
 
@@ -281,7 +284,8 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
     const ds=bd.querySelector('#cf_datossave'); if(ds) ds.onclick=async function(){
       try{ const r=scalar(await ctx.rpc('rcd_tns_config_datos_set',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,
         p_codigo_sucursal:v(el,'cf_suc'),p_codigo_prefijo:v(el,'cf_pre'),p_cod_bodega_def:v(el,'cf_bod'),
-        p_cod_forma_pago_def:v(el,'cf_fp'),p_cod_vendedor_def:''}));
+        p_cod_forma_pago_def:v(el,'cf_fp'),p_cod_vendedor_def:'',
+        p_cod_disposicion:v(el,'cf_disp'),p_cod_transporte:v(el,'cf_tra')}));
         if(r==='OK'){ ctx.log('Facturacion TNS','Datos de facturacion guardados',''); ctx.toast('Datos guardados'); }
         else if(r==='SOLO_ADMIN') ctx.toast('Solo el administrador puede configurar.','error');
         else ctx.toast('No se pudo.','error');
