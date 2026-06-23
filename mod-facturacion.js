@@ -192,25 +192,36 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
   // ===================== SINCRONIZACION TNS =====================
   async function syncView(){
     const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
-    let cs=[]; try{ const r=await ctx.rpc('rcd_tns_conceptos_lista',{p_gestor_id:ctx.ses.gestor_id}); cs=Array.isArray(r)?r:[]; }catch(e){}
+    let ms=[]; try{ const r=await ctx.rpc('rcd_tns_materiales_lista',{p_gestor_id:ctx.ses.gestor_id}); ms=Array.isArray(r)?r:[]; }catch(e){}
     bd.innerHTML=
-      '<div class="note">Para que NO se dupliquen en TNS: empareja cada concepto con su material de TNS (su nombre exacto en TNS). En la Fase 2 se podran traer y crear automaticamente.</div>'+
-      '<div class="mcard"><h3 style="margin:0 0 6px">Conceptos / productos → material en TNS</h3>'+
-      '<table class="mtable"><tr><th>Concepto en RCD Pro</th><th>Nombre en TNS</th><th>Codigo TNS</th>'+(pCrear?'<th></th>':'')+'</tr>'+
-      cs.map((c,i)=>'<tr><td>'+esc(c.etiqueta)+'</td>'+
-        '<td><input class="cnom" data-i="'+i+'" value="'+esc(c.tns_nombre||'')+'" placeholder="nombre en TNS" style="width:100%;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px"></td>'+
-        '<td><input class="ccod" data-i="'+i+'" value="'+esc(c.tns_codmat||'')+'" placeholder="cod." style="width:90px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12.5px" class="mono"></td>'+
-        (pCrear?'<td><button class="btn ghost sm" data-save="'+i+'">Guardar</button></td>':'')+'</tr>').join('')+
-      '</table></div>'+
-      '<div class="mcard"><h3 style="margin:0 0 4px">Clientes → tercero en TNS (por NIT)</h3>'+
-      '<div class="note">En la Fase 2: antes de facturar, RCD Pro busca el NIT en TNS; si existe lo usa, si no lo crea una vez (sin duplicar).</div></div>';
-    cs.forEach((c,i)=>{ const b=bd.querySelector('[data-save="'+i+'"]'); if(b) b.onclick=async()=>{
-      const nom=bd.querySelector('.cnom[data-i="'+i+'"]').value;
-      const cod=bd.querySelector('.ccod[data-i="'+i+'"]').value;
-      try{ const r=scalar(await ctx.rpc('rcd_tns_concepto_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_tipo:c.tipo,p_producto_id:c.producto_id,p_codmat:cod,p_nombre:nom}));
-        if(r==='OK') ctx.toast('Guardado'); else ctx.toast('No se pudo.','error');
-      }catch(e){ ctx.toast('Error.','error'); }
-    }; });
+      '<div class="note">Empareja cada material/servicio de RCD Pro con su codigo en TNS, para que las facturas no se dupliquen. El Transporte va como una linea (IVA 0).</div>'+
+      '<div class="mcard" style="max-width:none"><h3 style="margin:0 0 6px">Materiales y servicios → TNS</h3>'+
+      (pCrear?'<div style="margin-bottom:10px"><button class="btn ghost sm" id="bTraer">Traer materiales de TNS</button></div>':'')+
+      '<div style="overflow-x:auto;width:100%"><table class="mtable" style="min-width:640px"><tr><th>Material en RCD Pro</th><th>Codigo TNS</th><th>Nombre en TNS</th><th>Estado</th>'+(pCrear?'<th></th>':'')+'</tr>'+
+      ms.map((m,i)=>'<tr><td>'+esc(m.etiqueta)+(m.tipo==='transporte'?' <span class="badge off">IVA 0</span>':'')+'</td>'+
+        '<td><input class="ccod mono" data-i="'+i+'" value="'+esc(m.cod_mat||'')+'" placeholder="cod." style="width:90px"></td>'+
+        '<td><input class="cnom" data-i="'+i+'" value="'+esc(m.nombre_tns||'')+'" placeholder="nombre en TNS" style="width:100%"></td>'+
+        '<td>'+(m.vinculado?'<span class="badge ok">Vinculado</span>':'<span class="badge warn">Sin vincular</span>')+'</td>'+
+        (pCrear?'<td><div class="rowbtns"><button class="btn ghost sm" data-save="'+i+'">Guardar</button>'+(m.vinculado?'':'<button class="btn ghost sm" data-crear="'+i+'">Crear en TNS</button>')+'</div></td>':'')+
+        '</tr>').join('')+
+      '</table></div></div>'+
+      '<div class="mcard"><h3 style="margin:0 0 4px">Clientes → tercero en TNS</h3>'+
+      '<div class="note">Los clientes se emparejan/crean automaticamente al facturar (por NIT). No hay que hacer nada aqui.</div></div>';
+
+    function inp(cls,i){ return bd.querySelector('.'+cls+'[data-i="'+i+'"]'); }
+    async function guardar(i){
+      const m=ms[i], cod=inp('ccod',i).value.trim(), nom=inp('cnom',i).value.trim();
+      const r=scalar(await ctx.rpc('rcd_tns_material_set',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,
+        p_tipo:m.tipo,p_producto_id:m.producto_id||null,p_cod_mat:cod,p_nombre_tns:nom}));
+      if(r==='OK'){ ctx.log('Facturacion TNS','Material emparejado',m.etiqueta+' -> '+cod); ctx.toast('Guardado'); syncView(); }
+      else if(r==='SOLO_ADMIN') ctx.toast('Solo el administrador.','error');
+      else ctx.toast('No se pudo.','error');
+    }
+    ms.forEach((m,i)=>{
+      const b=bd.querySelector('[data-save="'+i+'"]'); if(b) b.onclick=()=>guardar(i).catch(()=>ctx.toast('Error.','error'));
+      const c=bd.querySelector('[data-crear="'+i+'"]'); if(c) c.onclick=()=>ctx.toast('Se activa al conectar TNS. Por ahora escribe el codigo y Guardar.','error');
+    });
+    const t=bd.querySelector('#bTraer'); if(t) t.onclick=()=>ctx.toast('Se activa al conectar TNS (Configuracion). Por ahora empareja manual.','error');
   }
 
   // ===================== CONFIGURACION =====================
