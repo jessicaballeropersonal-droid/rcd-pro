@@ -316,6 +316,7 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       btn.disabled=false; btn.textContent='Probar conexion';
     };
   }
+  
 
   shell();
 };
