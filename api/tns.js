@@ -43,6 +43,27 @@ async function rpc(fn, body){
 }
 function one(r){ return Array.isArray(r) ? r[0] : r; }
 
+async function tnsLogin(gestor_id, key){
+  const cfg = one(await rpc('rcd_tns_config_cred_get', { p_gestor_id: gestor_id }));
+  if(!cfg) return { error:'SIN_CREDENCIALES' };
+  let codEmpresa, usuario, clave;
+  try{
+    codEmpresa = decrypt(cfg.cod_empresa_cif, key);
+    usuario    = decrypt(cfg.usuario_cif, key);
+    clave      = decrypt(cfg.clave_cif, key);
+  }catch(e){ return { error:'NO_DESCIFRA' }; }
+  const url = (cfg.url_base || 'https://api.tns.co').replace(/\/+$/,'');
+  let lr, lj=null;
+  try{
+    lr = await fetch(url+'/v2/Acceso/Login', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ codigoEmpresa: codEmpresa, nombreUsuario: usuario, contrasenia: clave }) });
+    const t = await lr.text(); try{ lj = JSON.parse(t); }catch{ lj = null; }
+  }catch(e){ return { error:'NO_CONECTA_TNS' }; }
+  const ok = !!(lr.ok && lj && lj.status === true && lj.data);
+  if(!ok) return { error: (lj && lj.message) || ('HTTP '+(lr ? lr.status : '?')) };
+  return { token: lj.data, url };
+}
+
 module.exports = async (req, res) => {
   if(req.method !== 'POST'){ res.status(405).json({ok:false, error:'METHOD'}); return; }
 
@@ -73,35 +94,30 @@ module.exports = async (req, res) => {
 
     // ---- Probar conexion (descifra y hace Login a TNS) ----
     if(accion === 'probar_conexion'){
-      const cfg = one(await rpc('rcd_tns_config_cred_get', { p_gestor_id: gestor_id }));
-      if(!cfg){ res.status(200).json({ok:false, error:'SIN_CREDENCIALES'}); return; }
-
-      let codEmpresa, usuario, clave, url;
-      try{
-        codEmpresa = decrypt(cfg.cod_empresa_cif, key);
-        usuario    = decrypt(cfg.usuario_cif, key);
-        clave      = decrypt(cfg.clave_cif, key);
-      }catch(e){ res.status(200).json({ok:false, error:'NO_DESCIFRA'}); return; }
-      url = (cfg.url_base || 'https://api.tns.co').replace(/\/+$/,'');
-
-      let lr, ltxt, lj=null;
-      try{
-        lr = await fetch(url+'/v2/Acceso/Login', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ codigoEmpresa: codEmpresa, nombreUsuario: usuario, contrasenia: clave })
-        });
-        ltxt = await lr.text();
-        try{ lj = JSON.parse(ltxt); }catch{ lj = null; }
-      }catch(e){
-        await rpc('rcd_tns_config_conexion_set', { p_gestor_id: gestor_id, p_ok: false });
-        res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return;
-      }
-
-      const okLogin = !!(lr.ok && lj && lj.status === true && lj.data);
+      const lg = await tnsLogin(gestor_id, key);
+      const okLogin = !lg.error;
       await rpc('rcd_tns_config_conexion_set', { p_gestor_id: gestor_id, p_ok: okLogin });
-
       if(okLogin){ res.status(200).json({ok:true}); return; }
-      res.status(200).json({ok:false, error: (lj && lj.message) || ('HTTP '+(lr ? lr.status : '?')) }); return;
+      res.status(200).json({ok:false, error: lg.error}); return;
+    }
+
+    // ---- Traer materiales de TNS (Material/Listar) ----
+    if(accion === 'traer_materiales'){
+      const lg = await tnsLogin(gestor_id, key);
+      if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      let r2, j2=null;
+      try{
+        r2 = await fetch(lg.url+'/v2/tablas/Material/Listar', {
+          method:'GET', headers:{'Authorization':'Bearer '+lg.token} });
+        const t2 = await r2.text(); try{ j2 = JSON.parse(t2); }catch{ j2 = null; }
+      }catch(e){ res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return; }
+      if(!(r2.ok && j2 && j2.status === true)){
+        res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')) }); return;
+      }
+      const lista = (Array.isArray(j2.data) ? j2.data : []).map(x => ({
+        codigo: x.codigo, descripcion: x.descripcion, iva: x.porcentajeIva
+      })).filter(x => x.codigo);
+      res.status(200).json({ok:true, materiales: lista}); return;
     }
 
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
