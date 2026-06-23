@@ -216,24 +216,74 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
   // ===================== CONFIGURACION =====================
   async function cfgView(){
     const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
-    let c={codsucursal:'01',prefijo:'FV',forma_pago:'CR',enviar_dian:true};
-    try{ const r=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id})); if(r) c=r; }catch(e){}
-    bd.innerHTML='<div class="mcard"><h3 style="margin:0 0 4px">Conexion con TNS</h3>'+
-      '<div class="note">Las claves de TNS se guardan seguras en el servidor (no en la app). Aqui defines como se arman las facturas.</div>'+
-      '<div class="row2"><div class="field"><label>Sucursal (codsucursal)</label><input id="cf_suc" value="'+esc(c.codsucursal||'01')+'"></div>'+
-      '<div class="field"><label>Prefijo de factura</label><input id="cf_pre" value="'+esc(c.prefijo||'FV')+'"></div></div>'+
-      '<div class="row2"><div class="field"><label>Forma de pago por defecto</label><select id="cf_fp">'+
-        '<option value="CR"'+(c.forma_pago==='CR'?' selected':'')+'>Credito (CR)</option>'+
-        '<option value="CO"'+(c.forma_pago==='CO'?' selected':'')+'>Contado (CO)</option></select></div>'+
-      '<div class="field"><label>Enviar a DIAN al facturar</label><select id="cf_dian">'+
-        '<option value="si"'+(c.enviar_dian!==false?' selected':'')+'>Si, automatico</option>'+
-        '<option value="no"'+(c.enviar_dian===false?' selected':'')+'>No, solo crear</option></select></div></div>'+
-      (pCrear?'<button class="btn primary" id="cf_save">Guardar configuracion</button>':'')+
+    let c={}; try{ const r=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id})); if(r) c=r; }catch(e){}
+    const tieneCred=!!c.tiene_credenciales;
+    const estado = tieneCred
+      ? (c.ultima_conexion_ok===true ? '<span class="badge ok">Conexion correcta</span>'
+        : c.ultima_conexion_ok===false ? '<span class="badge danger">Ultima prueba fallo</span>'
+        : '<span class="badge warn">Credenciales guardadas, sin probar</span>')
+      : '<span class="badge off">Sin credenciales</span>';
+    bd.innerHTML=
+      '<div class="mcard"><h3 style="margin:0 0 4px">Configuracion · Facturacion electronica</h3>'+
+      '<div class="note">Conecta RCD Pro con tu proveedor para emitir facturas a la DIAN. La clave se guarda cifrada; el navegador nunca la vuelve a mostrar.</div>'+
+      '<div class="field"><label>Proveedor</label><select id="cf_prov"><option value="TNS" selected>TNS</option><option value="" disabled>Alegra (proximamente)</option><option value="" disabled>Siigo (proximamente)</option></select></div>'+
+      '<div style="margin:6px 0">Estado: '+estado+'</div>'+
+      '<h3 style="margin:14px 0 4px;font-size:14px">Credenciales TNS</h3>'+
+      (tieneCred?'<div class="note">Ya hay credenciales guardadas. Escribelas de nuevo solo si quieres cambiarlas.</div>':'')+
+      '<div class="field"><label>Codigo de empresa</label><input id="cf_emp" placeholder="Ej. 001"></div>'+
+      '<div class="field"><label>Usuario</label><input id="cf_usr" placeholder="Usuario TNS"></div>'+
+      '<div class="field"><label>Contrasena</label><input id="cf_pwd" type="password" placeholder="'+(tieneCred?'(guardada) escribe para cambiar':'clave TNS')+'"></div>'+
+      '<div class="field"><label>URL de la API</label><input id="cf_url" value="'+esc(c.url_base||'https://api.tns.co')+'"></div>'+
+      (pCrear?'<button class="btn primary sm" id="cf_credsave">Guardar credenciales</button>':'')+
+      '<h3 style="margin:16px 0 4px;font-size:14px">Datos de facturacion</h3>'+
+      '<div class="row2"><div class="field"><label>Codigo sucursal</label><input id="cf_suc" value="'+esc(c.codigo_sucursal||'')+'" placeholder="Ej. 01"></div>'+
+      '<div class="field"><label>Prefijo factura</label><input id="cf_pre" value="'+esc(c.codigo_prefijo||'')+'" placeholder="Ej. FE"></div></div>'+
+      '<div class="row2"><div class="field"><label>Bodega por defecto</label><input id="cf_bod" value="'+esc(c.cod_bodega_def||'')+'" placeholder="Ej. 00"></div>'+
+      '<div class="field"><label>Forma de pago por defecto</label><select id="cf_fp">'+
+        '<option value="CO"'+((c.cod_forma_pago_def||'CO')==='CO'?' selected':'')+'>Contado (CO)</option>'+
+        '<option value="CR"'+(c.cod_forma_pago_def==='CR'?' selected':'')+'>Credito (CR)</option></select></div></div>'+
+      (pCrear?'<div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost sm" id="cf_datossave">Guardar datos</button><button class="btn primary sm" id="cf_test">Probar conexion</button></div>':'')+
       '</div>';
-    const sv=bd.querySelector('#cf_save'); if(sv) sv.onclick=async()=>{
-      try{ const r=scalar(await ctx.rpc('rcd_tns_config_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_codsucursal:v(el,'cf_suc'),p_prefijo:v(el,'cf_pre'),p_forma_pago:v(el,'cf_fp'),p_enviar_dian:(v(el,'cf_dian')==='si')}));
-        if(r==='OK') ctx.toast('Configuracion guardada'); else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso.','error'); else ctx.toast('No se pudo.','error');
+
+    async function srv(accion, extra){
+      const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(Object.assign({accion:accion,usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id},extra||{}))});
+      return await r.json();
+    }
+    function errMsg(e){
+      return ({SOLO_ADMIN:'Solo el administrador puede configurar.',SIN_CREDENCIALES:'Primero guarda las credenciales.',
+        LLAVE_INVALIDA:'Falta configurar la llave de cifrado en el servidor.',NO_DESCIFRA:'No se pudieron leer las credenciales.',
+        NO_CONECTA_TNS:'No se pudo conectar con TNS (revisa la URL o tu internet).',FALTA_GESTOR:'Error de sesion.'})[e] || ('TNS: '+(e||'error'));
+    }
+
+    const cs=bd.querySelector('#cf_credsave'); if(cs) cs.onclick=async function(){
+      const emp=v(el,'cf_emp'),usr=v(el,'cf_usr'),pwd=v(el,'cf_pwd');
+      if(!emp||!usr||!pwd){ ctx.toast('Escribe empresa, usuario y contrasena.','error'); return; }
+      const btn=this; btn.disabled=true; btn.textContent='Guardando...';
+      try{ const r=await srv('guardar_credenciales',{cod_empresa:emp,usuario:usr,clave:pwd,url_base:v(el,'cf_url')});
+        if(r&&r.ok){ ctx.log('Facturacion TNS','Credenciales guardadas',''); ctx.toast('Credenciales guardadas'); cfgView(); return; }
+        ctx.toast(errMsg(r&&r.error),'error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Guardar credenciales';
+    };
+
+    const ds=bd.querySelector('#cf_datossave'); if(ds) ds.onclick=async function(){
+      try{ const r=scalar(await ctx.rpc('rcd_tns_config_datos_set',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,
+        p_codigo_sucursal:v(el,'cf_suc'),p_codigo_prefijo:v(el,'cf_pre'),p_cod_bodega_def:v(el,'cf_bod'),
+        p_cod_forma_pago_def:v(el,'cf_fp'),p_cod_vendedor_def:''}));
+        if(r==='OK'){ ctx.log('Facturacion TNS','Datos de facturacion guardados',''); ctx.toast('Datos guardados'); }
+        else if(r==='SOLO_ADMIN') ctx.toast('Solo el administrador puede configurar.','error');
+        else ctx.toast('No se pudo.','error');
       }catch(e){ ctx.toast('Error.','error'); }
+    };
+
+    const tt=bd.querySelector('#cf_test'); if(tt) tt.onclick=async function(){
+      const btn=this; btn.disabled=true; btn.textContent='Probando...';
+      try{ const r=await srv('probar_conexion',{});
+        if(r&&r.ok){ ctx.log('Facturacion TNS','Probar conexion','OK'); ctx.toast('Conexion correcta con TNS'); cfgView(); return; }
+        ctx.toast(errMsg(r&&r.error),'error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Probar conexion';
     };
   }
 
