@@ -233,8 +233,11 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
     });
     const t=bd.querySelector('#bTraer'); if(t) t.onclick=async function(){
       const btn=this; btn.disabled=true; btn.textContent='Trayendo...';
-      try{ const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({accion:'traer_materiales',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id})}).then(x=>x.json());
+      try{
+        const cfg=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{};
+        if(!cfg.codigo_sucursal){ ctx.toast('Primero guarda el Codigo sucursal en Configuracion -> Datos.','error'); btn.disabled=false; btn.textContent='Traer materiales de TNS'; return; }
+        const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({accion:'traer_materiales',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal})}).then(x=>x.json());
         if(r&&r.ok){ ctx.toast('Se trajeron '+(r.materiales?r.materiales.length:0)+' materiales'); syncView(r.materiales||[]); return; }
         ctx.toast(r&&r.error==='SIN_CREDENCIALES'?'Primero conecta TNS en Configuracion.':('TNS: '+((r&&r.error)||'error')),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
@@ -316,7 +319,6 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       btn.disabled=false; btn.textContent='Probar conexion';
     };
   }
-  
 
   shell();
 };
