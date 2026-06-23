@@ -13,6 +13,8 @@ window.RCD_MODULOS.parametros = function(el, ctx){
     ['densidades','Densidades'],
     ['volquetas','Volquetas'],
     ['municipios','Municipios'],
+    ['actividad','Actividad'],
+    ['sistema','Sistema'],
     ['otros','Otros']
   ];
   let activa = 'identidad';
@@ -39,6 +41,8 @@ window.RCD_MODULOS.parametros = function(el, ctx){
     else if(activa==='densidades'){ densidades(body, ctx); }
     else if(activa==='volquetas'){ volquetas(body, ctx); }
     else if(activa==='municipios'){ municipios(body, ctx); }
+    else if(activa==='actividad'){ actividad(body, ctx); }
+    else if(activa==='sistema'){ sistema(body, ctx); }
     else {
       body.innerHTML = '<div class="note">Esta seccion se construye en su paso del Grupo 1.</div>';
     }
@@ -635,6 +639,101 @@ async function municipios(body, ctx){
 }
 
 // ---------- utilidades ----------
+// ---------- Pestana ACTIVIDAD ----------
+async function actividad(body, ctx){
+  body.innerHTML='<div class="loading">Cargando actividad...</div>';
+  const MODS=['Acceso','Solicitudes','Cotizaciones','Recepcion','Despacho','Produccion','Inventario','Liquidacion','Facturacion','Clientes','Volqueteros','Aliados','Precios','Parametros'];
+  let usuarios=[]; try{ const r=await ctx.rpc('rcd_actividad_usuarios',{p_gestor_id:ctx.ses.gestor_id}); usuarios=Array.isArray(r)?r:[]; }catch(e){}
+  let fUser='', fMod='', fDesde='';
+  async function cargar(){
+    const cont=body.querySelector('#actBody'); if(cont) cont.innerHTML='<div class="loading">Cargando...</div>';
+    let rs=[]; try{ const r=await ctx.rpc('rcd_actividad_lista',{p_gestor_id:ctx.ses.gestor_id,p_usuario_id:fUser||null,p_modulo:fMod||null,p_desde:fDesde||null,p_limit:200}); rs=Array.isArray(r)?r:[]; }catch(e){}
+    cont.innerHTML = rs.length?
+      '<div style="overflow-x:auto;width:100%"><table class="mtable" style="min-width:680px"><tr><th>Fecha / hora</th><th>Usuario</th><th>Modulo</th><th>Accion</th><th>Detalle</th></tr>'+
+      rs.map(a=>'<tr><td class="mono" style="white-space:nowrap">'+esc((a.creado_en||'').replace('T',' ').slice(0,16))+'</td>'+
+        '<td>'+esc(a.usuario_nombre||'')+(a.es_admin?' <span class="badge esc">Admin</span>':'')+'</td>'+
+        '<td><span class="badge off">'+esc(a.modulo||'')+'</span></td>'+
+        '<td>'+esc(a.accion||'')+'</td>'+
+        '<td style="color:var(--muted)">'+esc(a.detalle||'')+'</td></tr>').join('')+'</table></div>'
+      : '<div class="empty">Sin actividad registrada en este filtro.</div>';
+  }
+  body.innerHTML=
+    '<h3 style="margin:0 0 4px">Actividad de usuarios</h3>'+
+    '<p class="lead">Quien hizo que, en que modulo y cuando. Solo lectura.</p>'+
+    '<div class="row3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'+
+      '<div class="field"><label>Usuario</label><select id="aFUser"><option value="">Todos</option>'+
+        usuarios.map(u=>'<option value="'+u.usuario_id+'">'+esc(u.usuario_nombre||'')+'</option>').join('')+'</select></div>'+
+      '<div class="field"><label>Modulo</label><select id="aFMod"><option value="">Todos</option>'+
+        MODS.map(m=>'<option value="'+m+'">'+m+'</option>').join('')+'</select></div>'+
+      '<div class="field"><label>Desde</label><input type="date" id="aFDesde"></div>'+
+    '</div>'+
+    '<div id="actBody"></div>';
+  body.querySelector('#aFUser').onchange=e=>{ fUser=e.target.value; cargar(); };
+  body.querySelector('#aFMod').onchange=e=>{ fMod=e.target.value; cargar(); };
+  body.querySelector('#aFDesde').onchange=e=>{ fDesde=e.target.value; cargar(); };
+  cargar();
+}
+
+// ---------- Pestana SISTEMA (reiniciar) ----------
+async function sistema(body, ctx){
+  const esAdmin = (ctx.ses && ctx.ses.rol==='Administrador');
+  if(!esAdmin){ body.innerHTML='<div class="note warn">Solo el administrador puede ver y usar el reinicio del sistema.</div>'; return; }
+  const GRUPOS=[
+    ['operacion','Operacion','recepciones, despachos, ordenes, solicitudes, produccion, inventario'],
+    ['comercial','Comercial','cotizaciones, liquidaciones, anticipos'],
+    ['obras','Obras','arrastra comercial + operacion'],
+    ['clientes','Clientes','arrastra obras + comercial + operacion'],
+    ['volqueteros','Volqueteros y volquetas','arrastra comercial + operacion'],
+    ['aliados','Aliados de maquila',''],
+    ['productos','Productos','arrastra comercial + operacion'],
+    ['precios','Lista de precios',''],
+    ['usuarios','Usuarios (no administradores)','']
+  ];
+  const NOM={operacion:'Operacion',comercial:'Comercial',obras:'Obras',clientes:'Clientes',volqueteros:'Volqueteros y volquetas',aliados:'Aliados',productos:'Productos',precios:'Lista de precios',usuarios:'Usuarios no admin'};
+  function expandir(sel){
+    const g=new Set(sel);
+    if(g.has('clientes')) g.add('obras');
+    if(g.has('obras')||g.has('productos')||g.has('aliados')||g.has('volqueteros')){ g.add('comercial'); g.add('operacion'); }
+    return g;
+  }
+  body.innerHTML=
+    '<div style="border:1.5px solid #F1C9C4;background:#FDF4F3;border-radius:14px;padding:16px 18px">'+
+      '<h3 style="margin:0;color:#A02114">Reiniciar sistema</h3>'+
+      '<p style="font-size:13px;color:#7a2018;margin:4px 0 12px">Marca SOLO lo que quieres borrar. No se puede deshacer.</p>'+
+      '<label class="chk" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-weight:700"><input type="checkbox" id="rAll" style="width:auto"> Seleccionar todo</label>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        GRUPOS.map(g=>'<label class="rg" style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#fff;cursor:pointer;font-size:13px">'+
+          '<span><input type="checkbox" class="rgrp" value="'+g[0]+'" style="width:auto"> <b>'+g[1]+'</b></span>'+
+          (g[2]?'<span style="font-size:11px;color:var(--muted);margin-top:3px">'+g[2]+'</span>':'')+
+        '</label>').join('')+
+      '</div>'+
+      '<div class="note warn" style="margin-top:10px"><b>Aviso de cascada:</b> si marcas un grupo padre, se borran tambien sus dependientes. Te muestro la lista exacta antes de ejecutar.</div>'+
+      '<div style="background:var(--ok-soft);border:1px solid #BFE3CB;border-radius:10px;padding:10px;margin:10px 0;font-size:12.5px"><b>Se conserva siempre:</b> administradores, estructura de la app (menu y permisos) y la escombrera.</div>'+
+      '<div class="field" style="max-width:300px"><label>Para confirmar, escribe: REINICIAR</label><input id="rConf" placeholder="REINICIAR"></div>'+
+      '<button class="btn" id="rGo" style="background:var(--bad);color:#fff">Reiniciar lo seleccionado</button>'+
+    '</div>';
+  const chAll=body.querySelector('#rAll');
+  const chs=Array.from(body.querySelectorAll('.rgrp'));
+  chAll.onchange=()=>{ chs.forEach(c=>c.checked=chAll.checked); };
+  chs.forEach(c=>c.onchange=()=>{ chAll.checked=chs.every(x=>x.checked); });
+  body.querySelector('#rGo').onclick=async()=>{
+    const sel=chs.filter(c=>c.checked).map(c=>c.value);
+    if(sel.length===0){ ctx.toast('Marca al menos un grupo.','error'); return; }
+    if((body.querySelector('#rConf').value||'').trim().toUpperCase()!=='REINICIAR'){ ctx.toast('Escribe REINICIAR para confirmar.','error'); return; }
+    const full=Array.from(expandir(sel)).map(k=>NOM[k]||k);
+    const ok=await ctx.confirm('Se borrara: '+full.join(', ')+'. Esto NO se puede deshacer. Los administradores y la configuracion se conservan. ¿Confirmas?',{ok:'Si, reiniciar',cancel:'Cancelar'});
+    if(!ok) return;
+    const btn=body.querySelector('#rGo'); btn.disabled=true; btn.textContent='Reiniciando...';
+    try{ const r=scalar(await ctx.rpc('rcd_sistema_reiniciar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_grupos:sel}));
+      if(r==='OK'){ ctx.toast('Sistema reiniciado'); sistema(body,ctx); return; }
+      else if(r==='SOLO_ADMIN'){ ctx.toast('Solo el administrador.','error'); }
+      else if(r==='NADA_SELECCIONADO'){ ctx.toast('No seleccionaste nada.','error'); }
+      else ctx.toast('No se pudo: '+r,'error');
+    }catch(e){ ctx.toast('Error al reiniciar.','error'); }
+    btn.disabled=false; btn.textContent='Reiniciar lo seleccionado';
+  };
+}
+
 function numEs(n){ return (n==null?'':String(n).replace('.',',')); }
 function parseNum(s){ return parseFloat(String(s||'').replace(',','.'))||0; }
 function scalar(res){ return Array.isArray(res) ? res[0] : res; }
