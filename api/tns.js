@@ -168,15 +168,39 @@ module.exports = async (req, res) => {
         res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')), detalle: (t2||'').slice(0,400) }); return;
       }
       const d = j2.data || {};
+      const kx = d.kardexid || d.kardexId || d.kardexID || d.idKardex || d.id ||
+                 (Array.isArray(d.responseDetalle) && d.responseDetalle[0] && (d.responseDetalle[0].kardexid || d.responseDetalle[0].id)) || null;
       res.status(200).json({
         ok: true,
         success: (d.success !== false),
         consecutivo: d.consecutivo || d.numeroFactura || null,
+        kardexid: kx,
         asentado: d.asentado || false,
         mensaje: d.mensajeAsentado || j2.message || '',
         enlace_pago: d.enlacePago || null,
         detalle: d.responseDetalle || null
       }); return;
+    }
+
+    // ---- Detallar factura (Ventas/Detallar -> cufe, estadoDian) ----
+    if(accion === 'detallar_factura'){
+      const lg = await tnsLogin(gestor_id, key);
+      if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      const kx = encodeURIComponent(body.kardexid || '');
+      const suc = encodeURIComponent(body.codigosucursal || '');
+      if(!kx){ res.status(200).json({ok:false, error:'SIN_KARDEXID'}); return; }
+      let r2, j2=null;
+      try{
+        r2 = await fetch(lg.url+'/v2/facturacion/Ventas/Detallar?kardexid='+kx+'&codigosucursal='+suc, {
+          method:'GET', headers:{'Authorization':'Bearer '+lg.token} });
+        const t2 = await r2.text(); try{ j2 = JSON.parse(t2); }catch{ j2 = null; }
+      }catch(e){ res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return; }
+      if(!(r2.ok && j2 && j2.status === true && j2.data)){
+        res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')) }); return;
+      }
+      const d = j2.data;
+      res.status(200).json({ok:true, cufe: d.cufe||'', estadoDian: d.estadoDian||'',
+        numero: d.numero||'', valorTotal: d.valorTotal||'', fechaAsentado: d.fechaAsentado||''}); return;
     }
 
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
