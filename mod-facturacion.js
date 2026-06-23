@@ -225,16 +225,18 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       '<div style="display:flex;justify-content:space-between;padding:6px 10px;background:#F4F8F7;border-radius:8px"><span>Subtotal</span><span class="mono">'+money(sub)+'</span></div>'+
       '<div style="display:flex;justify-content:space-between;padding:6px 10px"><span>IVA (19%)</span><span class="mono">'+money(iva)+'</span></div>'+
       '<div style="display:flex;justify-content:space-between;padding:9px 10px;background:var(--esc);color:#fff;border-radius:8px;font-weight:800;font-size:16px"><span>TOTAL</span><span class="mono">'+money(total)+'</span></div></div>'+
-      '<div class="note" style="margin-top:12px">Se creara como <b>borrador</b> en TNS (no se envia a la DIAN todavia). Despues lo revisas y emites.</div>'+
+      '<div class="note" style="margin-top:12px">Al confirmar se <b>emite la factura a la DIAN</b> (con su CUFE). Esto es legal y no se puede deshacer. Revisa bien antes.</div>'+
       '<div style="display:flex;gap:10px;margin-top:10px"><button class="btn ghost" id="bVolver">Volver</button>'+
-      '<button class="btn primary" id="bCrear"'+(faltan.length?' disabled':'')+'>Crear borrador en TNS</button></div></div>';
+      '<button class="btn primary" id="bCrear"'+(faltan.length?' disabled':'')+'>Emitir a la DIAN</button></div></div>';
     bd.innerHTML=html;
     bd.querySelector('#bVolver').onclick=factView;
     const bc=bd.querySelector('#bCrear'); if(bc) bc.onclick=()=>crearBorrador(grupo, liqIds, ls, {sub,iva,total}, bc);
   }
 
   async function crearBorrador(grupo, liqIds, lineas, tot, btn){
-    btn.disabled=true; btn.textContent='Creando en TNS...';
+    const ok=await ctx.confirm('Vas a EMITIR esta factura a la DIAN por '+money(tot.total)+'. Es legal y no se puede deshacer. ¿Continuar?');
+    if(!ok) return;
+    btn.disabled=true; btn.textContent='Emitiendo...';
     try{
       const cfg=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{};
       const hoy=new Date(); const dd=String(hoy.getDate()).padStart(2,'0'), mm=String(hoy.getMonth()+1).padStart(2,'0'), yy=hoy.getFullYear();
@@ -260,39 +262,56 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
         observacion: 'Liquidaciones: '+nums,
         detallePedido: detalle,
         detalleFormaPago: [],
-        asentar: 0,
+        asentar: 1,
         detalleDescuentos: []
       };
       const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({accion:'crear_factura',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00',factura})}).then(x=>x.json());
       if(!(r&&r.ok&&r.success!==false)){
         ctx.toast('TNS no acepto: '+((r&&(r.mensaje||r.error))||'error'),'error');
-        btn.disabled=false; btn.textContent='Crear borrador en TNS'; return;
+        btn.disabled=false; btn.textContent='Emitir a la DIAN'; return;
       }
-      // registrar en BD y marcar liquidaciones
       try{ await ctx.rpc('rcd_tns_factura_registrar',{p_gestor_id:ctx.ses.gestor_id,p_cliente_id:grupo.cliente_id,p_liq_ids:liqIds,
         p_cod_tercero:grupo.cod_tercero,p_nombre_cliente:grupo.cliente||'',p_consecutivo:r.consecutivo||'',
-        p_subtotal:tot.sub,p_iva:tot.iva,p_total:tot.total,p_estado:'borrador',p_mensaje:r.mensaje||''}); }catch(e){}
-      ctx.log('Facturacion TNS','Borrador creado', (grupo.cliente||'')+' · '+(r.consecutivo||'')+' · '+money(tot.total));
-      ctx.toast('Borrador creado en TNS'+(r.consecutivo?(' (N.º '+r.consecutivo+')'):''));
-      factView();
-    }catch(e){ ctx.toast('Error de conexion.','error'); btn.disabled=false; btn.textContent='Crear borrador en TNS'; }
+        p_subtotal:tot.sub,p_iva:tot.iva,p_total:tot.total,p_estado:'emitida',p_mensaje:r.mensaje||'',p_kardexid:r.kardexid||''}); }catch(e){}
+      ctx.log('Facturacion TNS','Factura emitida', (grupo.cliente||'')+' · '+(r.consecutivo||'')+' · '+money(tot.total));
+      ctx.toast('Factura emitida'+(r.consecutivo?(' (N.º '+r.consecutivo+')'):''));
+      emiView();
+    }catch(e){ ctx.toast('Error de conexion.','error'); btn.disabled=false; btn.textContent='Emitir a la DIAN'; }
   }
 
   // ===================== EMITIDAS =====================
   async function emiView(){
     const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
     let fs=[]; try{ const r=await ctx.rpc('rcd_tns_facturas_lista',{p_gestor_id:ctx.ses.gestor_id}); fs=Array.isArray(r)?r:[]; }catch(e){}
-    bd.innerHTML='<div class="mcard"><h3 style="margin:0 0 4px">Facturas en TNS</h3>'+
-      '<p class="lead">Borradores y facturas emitidas. El envio a la DIAN (CUFE) se hace en E5.</p>'+
-      (fs.length?'<table class="mtable"><tr><th>N.º</th><th>Cliente</th><th>Estado</th><th style="text-align:right">Total</th><th>Fecha</th></tr>'+
-        fs.map(f=>{ const est=f.estado==='emitida'?'<span class="badge ok">Emitida</span>':(f.estado==='error'?'<span class="badge danger">Error</span>':'<span class="badge warn">Borrador</span>');
+    bd.innerHTML='<div class="mcard" style="max-width:none"><h3 style="margin:0 0 4px">Facturas en TNS</h3>'+
+      '<p class="lead">Facturas emitidas a la DIAN. Usa "Actualizar estado" para traer el CUFE cuando la DIAN lo valide.</p>'+
+      (fs.length?'<div style="overflow-x:auto"><table class="mtable" style="min-width:680px"><tr><th>N.º</th><th>Cliente</th><th>Estado DIAN</th><th style="text-align:right">Total</th><th>Fecha</th><th></th></tr>'+
+        fs.map((f,i)=>{ const ed=(f.estado_dian||'').toLowerCase();
+          const est=f.cufe?('<span class="badge ok">'+(esc(f.estado_dian||'Aceptada'))+'</span>')
+            :(ed.indexOf('rechaz')>=0?'<span class="badge danger">Rechazada</span>':'<span class="badge warn">Sin CUFE aun</span>');
           const fch=f.creada_en?String(f.creada_en).slice(0,10):'';
-          return '<tr><td class="mono"><b>'+esc(f.consecutivo||'—')+'</b>'+(f.cufe?'<br><span style="font-size:9px;color:var(--muted)">CUFE ok</span>':'')+'</td>'+
-            '<td>'+esc(f.nombre_cliente||'')+'</td><td>'+est+'</td>'+
+          return '<tr><td class="mono"><b>'+esc(f.consecutivo||'—')+'</b></td>'+
+            '<td>'+esc(f.nombre_cliente||'')+'</td><td>'+est+(f.cufe?'<br><span style="font-size:9px;color:var(--muted)">CUFE '+esc(String(f.cufe).slice(0,10))+'...</span>':'')+'</td>'+
             '<td style="text-align:right" class="mono">'+money(f.total)+'</td>'+
-            '<td class="mono">'+esc(fch)+'</td></tr>'; }).join('')+'</table>'
+            '<td class="mono">'+esc(fch)+'</td>'+
+            '<td>'+(f.kardexid&&!f.cufe?'<button class="btn ghost sm" data-est="'+i+'">Actualizar estado</button>':'')+'</td></tr>'; }).join('')+'</table></div>'
         :'<div class="empty">Sin facturas todavia.</div>')+'</div>';
+    bd.querySelectorAll('[data-est]').forEach(b=>{ const i=+b.dataset.est; b.onclick=()=>actualizarEstado(fs[i], b); });
+  }
+
+  async function actualizarEstado(f, btn){
+    btn.disabled=true; btn.textContent='Consultando...';
+    try{
+      const cfg=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{};
+      const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accion:'detallar_factura',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,kardexid:f.kardexid,codigosucursal:cfg.codigo_sucursal||'00'})}).then(x=>x.json());
+      if(!(r&&r.ok)){ ctx.toast('TNS: '+((r&&r.error)||'error'),'error'); btn.disabled=false; btn.textContent='Actualizar estado'; return; }
+      await ctx.rpc('rcd_tns_factura_estado_set',{p_gestor_id:ctx.ses.gestor_id,p_factura_id:f.id,p_kardexid:f.kardexid,p_cufe:r.cufe||'',p_estado_dian:r.estadoDian||''});
+      if(r.cufe){ ctx.log('Facturacion TNS','Estado DIAN actualizado', (f.consecutivo||'')+' · '+(r.estadoDian||'con CUFE')); ctx.toast('Estado actualizado'+(r.estadoDian?(': '+r.estadoDian):'')); }
+      else ctx.toast('Aun sin CUFE. La DIAN puede tardar unos minutos.','info');
+      emiView();
+    }catch(e){ ctx.toast('Error de conexion.','error'); btn.disabled=false; btn.textContent='Actualizar estado'; }
   }
 
   // ===================== SINCRONIZACION TNS =====================
