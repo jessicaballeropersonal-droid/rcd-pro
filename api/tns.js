@@ -148,6 +148,37 @@ module.exports = async (req, res) => {
       res.status(200).json({ok:true, clientes: lista, total_tns: arr.length, sin_campo_cliente: sinCampoCliente}); return;
     }
 
+    // ---- Crear factura (Ventas/Crear) ----
+    if(accion === 'crear_factura'){
+      const lg = await tnsLogin(gestor_id, key);
+      if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      const suc = encodeURIComponent(body.codigosucursal || '');
+      const factura = body.factura || {};
+      if(typeof factura.asentar === 'undefined') factura.asentar = 0; // 0 = borrador
+      let r2, j2=null, t2='';
+      try{
+        r2 = await fetch(lg.url+'/v2/facturacion/Ventas/Crear?codigosucursal='+suc, {
+          method:'POST',
+          headers:{'Authorization':'Bearer '+lg.token,'Content-Type':'application/json'},
+          body: JSON.stringify(factura)
+        });
+        t2 = await r2.text(); try{ j2 = JSON.parse(t2); }catch{ j2 = null; }
+      }catch(e){ res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return; }
+      if(!(r2.ok && j2)){
+        res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')), detalle: (t2||'').slice(0,400) }); return;
+      }
+      const d = j2.data || {};
+      res.status(200).json({
+        ok: true,
+        success: (d.success !== false),
+        consecutivo: d.consecutivo || d.numeroFactura || null,
+        asentado: d.asentado || false,
+        mensaje: d.mensajeAsentado || j2.message || '',
+        enlace_pago: d.enlacePago || null,
+        detalle: d.responseDetalle || null
+      }); return;
+    }
+
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
   } catch(e){
     res.status(200).json({ok:false, error: 'ERR:'+((e && e.message) || String(e)) });
