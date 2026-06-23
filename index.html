@@ -101,6 +101,7 @@
       const data = await r.json();
       if(Array.isArray(data) && data.length > 0){
         sessionStorage.setItem('rcd_sesion', JSON.stringify(data[0]));
+        try{ const s=data[0]; fetch(SUPABASE_URL+'/rest/v1/rpc/rcd_actividad_registrar', {method:'POST', headers, body:JSON.stringify({p_usuario_id:s.id, p_gestor_id:s.gestor_id, p_modulo:'Acceso', p_accion:'Inicio de sesion', p_detalle:''})}).catch(()=>{}); }catch(e){}
         window.location.href = 'panel.html';
       } else {
         showErr('Clave incorrecta.');
