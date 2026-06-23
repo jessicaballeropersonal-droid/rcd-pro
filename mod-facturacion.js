@@ -168,25 +168,131 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
   // ===================== POR FACTURAR =====================
   async function factView(){
     const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
-    let rs=[]; try{ const r=await ctx.rpc('rcd_liquidaciones_lista',{p_gestor_id:ctx.ses.gestor_id}); rs=Array.isArray(r)?r:[]; }catch(e){}
-    const pend=rs.filter(l=>l.estado!=='facturada');
-    bd.innerHTML='<div class="mcard"><h3 style="margin:0 0 4px">Liquidaciones listas para facturar</h3>'+
-      '<p class="lead">Vienen del modulo Liquidacion. Al facturar (Fase 2) se envian a TNS.</p>'+
-      (pend.length?'<table class="mtable"><tr><th>N.º Liq.</th><th>Cliente / Obra</th><th>Periodo</th><th style="text-align:right">Total</th><th></th></tr>'+
-        pend.map(l=>'<tr><td class="mono"><b>'+esc(l.numero||'')+'</b></td>'+
-          '<td>'+esc(l.cliente||'')+'<br><span style="font-size:12px;color:var(--muted)">'+esc(l.obra||'')+'</span></td>'+
+    let rs=[]; try{ const r=await ctx.rpc('rcd_tns_porfacturar_lista',{p_gestor_id:ctx.ses.gestor_id}); rs=Array.isArray(r)?r:[]; }catch(e){}
+    if(!rs.length){ bd.innerHTML='<div class="mcard"><h3 style="margin:0 0 4px">Por facturar</h3><div class="empty">No hay liquidaciones pendientes de facturar.</div></div>'; return; }
+    // agrupar por cliente
+    const grupos={};
+    rs.forEach(l=>{ const k=l.cliente_id||'sin'; if(!grupos[k]) grupos[k]={cliente_id:l.cliente_id,cliente:l.cliente,cod_tercero:l.cod_tercero,liqs:[]}; grupos[k].liqs.push(l); });
+    let html='<div class="mcard"><h3 style="margin:0 0 4px">Por facturar</h3>'+
+      '<p class="lead">Marca una o varias liquidaciones de un mismo cliente y prepara la factura. Cada liquidacion ira como bloque.</p></div>';
+    Object.values(grupos).forEach((g,gi)=>{
+      const tieneTns=!!g.cod_tercero;
+      html+='<div class="mcard"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'+
+        '<h3 style="margin:0">'+esc(g.cliente||'(sin cliente)')+' '+(tieneTns?'<span class="badge ok mono">TNS '+esc(g.cod_tercero)+'</span>':'<span class="badge danger">Sin TNS</span>')+'</h3></div>'+
+        (tieneTns?'':'<div class="note warn" style="margin-top:6px">Este cliente no esta emparejado con TNS. Traelo en Sincronizacion TNS antes de facturar.</div>')+
+        '<table class="mtable" style="margin-top:8px"><tr><th></th><th>N.º Liq.</th><th>Obra</th><th>Periodo</th><th style="text-align:right">Total</th></tr>'+
+        g.liqs.map(l=>'<tr><td><input type="checkbox" class="cliq" data-g="'+gi+'" value="'+l.liquidacion_id+'" style="width:auto"'+(tieneTns?'':' disabled')+'></td>'+
+          '<td class="mono"><b>'+esc(l.numero||'')+'</b></td><td>'+esc(l.obra||'')+'</td>'+
           '<td class="mono">'+esc(l.desde||'')+' a '+esc(l.hasta||'')+'</td>'+
-          '<td style="text-align:right" class="mono">'+money(l.total)+'</td>'+
-          '<td><button class="btn primary sm" data-fac="'+l.id+'">Facturar</button></td></tr>').join('')+'</table>'
-        :'<div class="empty">No hay liquidaciones pendientes de facturar.</div>')+'</div>';
-    bd.querySelectorAll('[data-fac]').forEach(b=>b.onclick=()=>ctx.toast('La emision en TNS se activa en la Fase 2 (conector).','info'));
+          '<td style="text-align:right" class="mono">'+money(l.total)+'</td></tr>').join('')+'</table>'+
+        (tieneTns&&pCrear?'<div style="margin-top:8px"><button class="btn primary sm" data-prep="'+gi+'">Preparar factura</button></div>':'')+
+        '</div>';
+    });
+    bd.innerHTML=html;
+    const gruposArr=Object.values(grupos);
+    bd.querySelectorAll('[data-prep]').forEach(b=>{ const gi=+b.dataset.prep; b.onclick=()=>{
+      const ids=Array.from(bd.querySelectorAll('.cliq[data-g="'+gi+'"]:checked')).map(x=>x.value);
+      if(!ids.length){ ctx.toast('Marca al menos una liquidacion.','error'); return; }
+      prepararFactura(gruposArr[gi], ids);
+    }; });
+  }
+
+  async function prepararFactura(grupo, liqIds){
+    const bd=body(); bd.innerHTML='<div class="loading">Cargando lineas...</div>';
+    let ls=[]; try{ const r=await ctx.rpc('rcd_tns_factura_lineas',{p_gestor_id:ctx.ses.gestor_id,p_liq_ids:liqIds}); ls=Array.isArray(r)?r:[]; }catch(e){}
+    if(!ls.length){ bd.innerHTML='<div class="mcard"><div class="empty">No se encontraron lineas.</div><button class="btn ghost" id="bVolver">Volver</button></div>'; const bv=bd.querySelector('#bVolver'); if(bv) bv.onclick=factView; return; }
+    // agrupar por liquidacion (bloques)
+    const bloques={};
+    ls.forEach(l=>{ if(!bloques[l.liquidacion_id]) bloques[l.liquidacion_id]={num:l.liq_numero,lineas:[]}; bloques[l.liquidacion_id].lineas.push(l); });
+    const faltan=ls.filter(l=>!l.vinculada);
+    let sub=0,iva=0; ls.forEach(l=>{ sub+=(+l.total||0); if(l.aplica_iva) iva+=(+l.total||0)*0.19; });
+    const total=sub+iva;
+
+    let html='<div class="mcard"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'+
+      '<h3 style="margin:0">Factura · '+esc(grupo.cliente||'')+'</h3><span class="badge ok mono">TNS '+esc(grupo.cod_tercero||'')+'</span></div>';
+    if(faltan.length) html+='<div class="note warn" style="margin-top:8px">Hay '+faltan.length+' linea(s) sin codigo TNS. Empareja el producto en Parametros, o pon el codigo de Disposicion/Transporte en Configuracion, antes de facturar.</div>';
+    Object.values(bloques).forEach(b=>{
+      html+='<div style="margin-top:14px"><b style="font-size:12px;text-transform:uppercase;color:var(--esc-d)">Liquidacion '+esc(b.num||'')+'</b>'+
+        '<table class="mtable" style="margin-top:4px"><tr><th>Detalle</th><th>Cod TNS</th><th style="text-align:right">Cant.</th><th style="text-align:right">Vr. unit</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr>'+
+        b.lineas.map(l=>'<tr><td>'+esc(l.descripcion||'')+'</td>'+
+          '<td>'+(l.vinculada?'<span class="badge ok mono">'+esc(l.cod_tns)+'</span>':'<span class="badge danger">Sin cod</span>')+'</td>'+
+          '<td style="text-align:right" class="mono">'+numEs(l.cantidad)+' '+esc(l.unidad||'')+'</td>'+
+          '<td style="text-align:right" class="mono">'+money(l.precio_unit)+'</td>'+
+          '<td style="text-align:right" class="mono">'+(l.aplica_iva?'19%':'0%')+'</td>'+
+          '<td style="text-align:right" class="mono">'+money(l.total)+'</td></tr>').join('')+'</table></div>';
+    });
+    html+='<div style="margin-top:14px;margin-left:auto;max-width:320px">'+
+      '<div style="display:flex;justify-content:space-between;padding:6px 10px;background:#F4F8F7;border-radius:8px"><span>Subtotal</span><span class="mono">'+money(sub)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;padding:6px 10px"><span>IVA (19%)</span><span class="mono">'+money(iva)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;padding:9px 10px;background:var(--esc);color:#fff;border-radius:8px;font-weight:800;font-size:16px"><span>TOTAL</span><span class="mono">'+money(total)+'</span></div></div>'+
+      '<div class="note" style="margin-top:12px">Se creara como <b>borrador</b> en TNS (no se envia a la DIAN todavia). Despues lo revisas y emites.</div>'+
+      '<div style="display:flex;gap:10px;margin-top:10px"><button class="btn ghost" id="bVolver">Volver</button>'+
+      '<button class="btn primary" id="bCrear"'+(faltan.length?' disabled':'')+'>Crear borrador en TNS</button></div></div>';
+    bd.innerHTML=html;
+    bd.querySelector('#bVolver').onclick=factView;
+    const bc=bd.querySelector('#bCrear'); if(bc) bc.onclick=()=>crearBorrador(grupo, liqIds, ls, {sub,iva,total}, bc);
+  }
+
+  async function crearBorrador(grupo, liqIds, lineas, tot, btn){
+    btn.disabled=true; btn.textContent='Creando en TNS...';
+    try{
+      const cfg=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{};
+      const hoy=new Date(); const dd=String(hoy.getDate()).padStart(2,'0'), mm=String(hoy.getMonth()+1).padStart(2,'0'), yy=hoy.getFullYear();
+      const fecha=dd+'/'+mm+'/'+yy;
+      const detalle=lineas.map(l=>({
+        codMat: l.cod_tns,
+        codBodega: cfg.cod_bodega_def||'00',
+        cantidad: +l.cantidad||0,
+        tipoUnidad: 'M',
+        descuento: 0,
+        porcIva: l.aplica_iva?19:0,
+        valor: +l.precio_unit||0,
+        impConsumo: 0
+      }));
+      const nums=[...new Set(lineas.map(l=>l.liq_numero))].join(', ');
+      const factura={
+        codigoPrefijo: cfg.codigo_prefijo||'',
+        fecha: fecha,
+        codTercero: grupo.cod_tercero,
+        nombreCliente: grupo.cliente||'',
+        codFormaPago: cfg.cod_forma_pago_def||'CO',
+        fechaVence: fecha,
+        observacion: 'Liquidaciones: '+nums,
+        detallePedido: detalle,
+        detalleFormaPago: [],
+        asentar: 0,
+        detalleDescuentos: []
+      };
+      const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accion:'crear_factura',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00',factura})}).then(x=>x.json());
+      if(!(r&&r.ok&&r.success!==false)){
+        ctx.toast('TNS no acepto: '+((r&&(r.mensaje||r.error))||'error'),'error');
+        btn.disabled=false; btn.textContent='Crear borrador en TNS'; return;
+      }
+      // registrar en BD y marcar liquidaciones
+      try{ await ctx.rpc('rcd_tns_factura_registrar',{p_gestor_id:ctx.ses.gestor_id,p_cliente_id:grupo.cliente_id,p_liq_ids:liqIds,
+        p_cod_tercero:grupo.cod_tercero,p_nombre_cliente:grupo.cliente||'',p_consecutivo:r.consecutivo||'',
+        p_subtotal:tot.sub,p_iva:tot.iva,p_total:tot.total,p_estado:'borrador',p_mensaje:r.mensaje||''}); }catch(e){}
+      ctx.log('Facturacion TNS','Borrador creado', (grupo.cliente||'')+' · '+(r.consecutivo||'')+' · '+money(tot.total));
+      ctx.toast('Borrador creado en TNS'+(r.consecutivo?(' (N.º '+r.consecutivo+')'):''));
+      factView();
+    }catch(e){ ctx.toast('Error de conexion.','error'); btn.disabled=false; btn.textContent='Crear borrador en TNS'; }
   }
 
   // ===================== EMITIDAS =====================
-  function emiView(){
-    body().innerHTML='<div class="mcard"><h3 style="margin:0 0 4px">Facturas emitidas en TNS</h3>'+
-      '<div class="note">Aqui apareceran las facturas con su numero, total y estado DIAN (CUFE) cuando se conecte TNS en la Fase 2.</div>'+
-      '<div class="empty">Sin facturas emitidas todavia.</div></div>';
+  async function emiView(){
+    const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
+    let fs=[]; try{ const r=await ctx.rpc('rcd_tns_facturas_lista',{p_gestor_id:ctx.ses.gestor_id}); fs=Array.isArray(r)?r:[]; }catch(e){}
+    bd.innerHTML='<div class="mcard"><h3 style="margin:0 0 4px">Facturas en TNS</h3>'+
+      '<p class="lead">Borradores y facturas emitidas. El envio a la DIAN (CUFE) se hace en E5.</p>'+
+      (fs.length?'<table class="mtable"><tr><th>N.º</th><th>Cliente</th><th>Estado</th><th style="text-align:right">Total</th><th>Fecha</th></tr>'+
+        fs.map(f=>{ const est=f.estado==='emitida'?'<span class="badge ok">Emitida</span>':(f.estado==='error'?'<span class="badge danger">Error</span>':'<span class="badge warn">Borrador</span>');
+          const fch=f.creada_en?String(f.creada_en).slice(0,10):'';
+          return '<tr><td class="mono"><b>'+esc(f.consecutivo||'—')+'</b>'+(f.cufe?'<br><span style="font-size:9px;color:var(--muted)">CUFE ok</span>':'')+'</td>'+
+            '<td>'+esc(f.nombre_cliente||'')+'</td><td>'+est+'</td>'+
+            '<td style="text-align:right" class="mono">'+money(f.total)+'</td>'+
+            '<td class="mono">'+esc(fch)+'</td></tr>'; }).join('')+'</table>'
+        :'<div class="empty">Sin facturas todavia.</div>')+'</div>';
   }
 
   // ===================== SINCRONIZACION TNS =====================
