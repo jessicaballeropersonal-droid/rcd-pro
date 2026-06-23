@@ -105,9 +105,10 @@ module.exports = async (req, res) => {
     if(accion === 'traer_materiales'){
       const lg = await tnsLogin(gestor_id, key);
       if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      const suc = encodeURIComponent(body.codigosucursal || '');
       let r2, j2=null;
       try{
-        r2 = await fetch(lg.url+'/v2/tablas/Material/Listar', {
+        r2 = await fetch(lg.url+'/v2/tablas/Material/Listar?codigosucursal='+suc, {
           method:'GET', headers:{'Authorization':'Bearer '+lg.token} });
         const t2 = await r2.text(); try{ j2 = JSON.parse(t2); }catch{ j2 = null; }
       }catch(e){ res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return; }
