@@ -190,78 +190,15 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
   }
 
   // ===================== SINCRONIZACION TNS =====================
-  async function syncView(tnsList){
-    const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
-    let ms=[]; try{ const r=await ctx.rpc('rcd_tns_materiales_lista',{p_gestor_id:ctx.ses.gestor_id}); ms=Array.isArray(r)?r:[]; }catch(e){}
-    const hayTns=Array.isArray(tnsList)&&tnsList.length>0;
+  async function syncView(){
+    const bd=body();
     bd.innerHTML=
-      '<div class="note">Dale "Traer materiales de TNS" y se emparejan solos por nombre. Los que tengan nombre distinto en TNS, emparejalos a mano con el selector. El Transporte va como linea (IVA 0).</div>'+
-      '<div class="mcard" style="max-width:none"><h3 style="margin:0 0 6px">Materiales y servicios → TNS</h3>'+
-      (pCrear?'<div style="margin-bottom:10px"><button class="btn ghost sm" id="bTraer">Traer materiales de TNS</button>'+(hayTns?' <span class="badge ok">'+tnsList.length+' materiales traidos · elige en cada fila</span>':'')+'</div>':'')+
-      '<div style="overflow-x:auto;width:100%"><table class="mtable" style="min-width:640px"><tr><th>Material en RCD Pro</th><th>Codigo TNS</th><th>Material en TNS</th><th>Estado</th>'+(pCrear?'<th></th>':'')+'</tr>'+
-      ms.map((m,i)=>'<tr><td>'+esc(m.etiqueta)+(m.tipo==='transporte'?' <span class="badge off">IVA 0</span>':'')+'</td>'+
-        '<td><input class="ccod mono" data-i="'+i+'" value="'+esc(m.cod_mat||'')+'" placeholder="cod." style="width:90px"></td>'+
-        '<td>'+
-          (hayTns?'<select class="csel" data-i="'+i+'" style="width:100%;margin-bottom:4px"><option value="">elegir de TNS...</option>'+
-            tnsList.map((x,j)=>'<option value="'+j+'">'+esc(x.codigo)+' - '+esc(x.descripcion||'')+'</option>').join('')+'</select>':'')+
-          '<input class="cnom" data-i="'+i+'" value="'+esc(m.nombre_tns||'')+'" placeholder="nombre en TNS" style="width:100%">'+
-        '</td>'+
-        '<td>'+(m.vinculado?'<span class="badge ok">Vinculado</span>':'<span class="badge warn">Sin vincular</span>')+'</td>'+
-        (pCrear?'<td><div class="rowbtns"><button class="btn ghost sm" data-save="'+i+'">Guardar</button>'+(m.vinculado?'':'<button class="btn ghost sm" data-crear="'+i+'">Crear en TNS</button>')+'</div></td>':'')+
-        '</tr>').join('')+
-      '</table></div></div>'+
+      '<div class="mcard"><h3 style="margin:0 0 4px">Materiales y servicios → TNS</h3>'+
+      '<div class="note">Los materiales/productos ahora se sincronizan en <b>Parametros → Productos terminados</b>, donde cada uno muestra su estado TNS (verde si esta vinculado). Aqui ya no se gestionan.</div></div>'+
       '<div class="mcard"><h3 style="margin:0 0 4px">Clientes → tercero en TNS</h3>'+
       '<div class="note">Trae tus clientes de TNS (con su codigo, NIT y ciudad). Se emparejan por NIT con los de RCD Pro: si existe se actualiza, si no se crea.</div>'+
       (pCrear?'<div style="margin-top:8px"><button class="btn ghost sm" id="bTraerCli">Traer clientes de TNS</button></div>':'')+
       '<div id="cliRes" class="note" style="display:none;margin-top:10px"></div></div>';
-
-    function inp(cls,i){ return bd.querySelector('.'+cls+'[data-i="'+i+'"]'); }
-    async function guardar(i){
-      const m=ms[i], cod=inp('ccod',i).value.trim(), nom=inp('cnom',i).value.trim();
-      const r=scalar(await ctx.rpc('rcd_tns_material_set',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,
-        p_tipo:m.tipo,p_producto_id:m.producto_id||null,p_cod_mat:cod,p_nombre_tns:nom}));
-      if(r==='OK'){ ctx.log('Facturacion TNS','Material emparejado',m.etiqueta+' -> '+cod); ctx.toast('Guardado'); syncView(tnsList); }
-      else if(r==='SOLO_ADMIN') ctx.toast('Solo el administrador.','error');
-      else ctx.toast('No se pudo.','error');
-    }
-    ms.forEach((m,i)=>{
-      const b=bd.querySelector('[data-save="'+i+'"]'); if(b) b.onclick=()=>guardar(i).catch(()=>ctx.toast('Error.','error'));
-      const c=bd.querySelector('[data-crear="'+i+'"]'); if(c) c.onclick=()=>ctx.toast('Crea el material en TNS y luego usa "Traer materiales de TNS".','error');
-      const s=bd.querySelector('.csel[data-i="'+i+'"]'); if(s) s.onchange=function(){
-        const j=this.value; if(j==='') return;
-        inp('ccod',i).value=tnsList[j].codigo||'';
-        inp('cnom',i).value=tnsList[j].descripcion||'';
-      };
-    });
-    const t=bd.querySelector('#bTraer'); if(t) t.onclick=async function(){
-      const btn=this; btn.disabled=true; btn.textContent='Trayendo...';
-      try{
-        const cfg=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{};
-        if(!cfg.codigo_sucursal){ ctx.toast('Primero guarda el Codigo sucursal en Configuracion -> Datos.','error'); btn.disabled=false; btn.textContent='Traer materiales de TNS'; return; }
-        const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({accion:'traer_materiales',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal})}).then(x=>x.json());
-        if(r&&r.ok){
-          const tns=r.materiales||[];
-          const norm=s=>(s||'').toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-          let emp=0;
-          for(const m of ms){
-            if(m.vinculado) continue;
-            const hit=tns.find(x=>norm(x.descripcion)===norm(m.etiqueta));
-            if(hit){
-              try{ const rr=scalar(await ctx.rpc('rcd_tns_material_set',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,
-                p_tipo:m.tipo,p_producto_id:m.producto_id||null,p_cod_mat:hit.codigo,p_nombre_tns:hit.descripcion}));
-                if(rr==='OK') emp++;
-              }catch(e){}
-            }
-          }
-          if(emp>0) ctx.log('Facturacion TNS','Materiales emparejados auto', emp+' de '+ms.length);
-          ctx.toast('Se trajeron '+tns.length+' de TNS · emparejados '+emp+' por nombre');
-          syncView(tns); return;
-        }
-        ctx.toast(r&&r.error==='SIN_CREDENCIALES'?'Primero conecta TNS en Configuracion.':('TNS: '+((r&&r.error)||'error')),'error');
-      }catch(e){ ctx.toast('Error de conexion.','error'); }
-      btn.disabled=false; btn.textContent='Traer materiales de TNS';
-    };
 
     const tc=bd.querySelector('#bTraerCli'); if(tc) tc.onclick=async function(){
       const btn=this, box=bd.querySelector('#cliRes'); btn.disabled=true; btn.textContent='Trayendo...';
