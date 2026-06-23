@@ -17,8 +17,9 @@ window.RCD_MODULOS.clientes = function(el, ctx){
       '<p class="lead">El cliente (generador) y sus obras. La obra define el regimen (PMA/Cupo) por su area.</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Nuevo cliente</button></div>':'')+
       (cs.length?
-        '<table class="mtable"><tr><th>Cliente</th><th>NIT</th><th>Obras</th><th>Estado</th><th></th></tr>'+
+        '<table class="mtable"><tr><th>Cliente</th><th>NIT</th><th>TNS</th><th>Obras</th><th>Estado</th><th></th></tr>'+
         cs.map((c,i)=>'<tr><td><b>'+esc(c.razon_social)+'</b></td><td class="mono">'+esc(c.nit||'')+'</td>'+
+          '<td>'+(c.cod_tercero?'<span class="badge ok mono">TNS '+esc(c.cod_tercero)+'</span>':'<span class="badge danger">Sin TNS</span>')+'</td>'+
           '<td class="mono">'+c.n_obras+'</td>'+
           '<td><span class="badge '+(c.activo?'ok':'off')+'">'+(c.activo?'Activo':'Inactivo')+'</span></td>'+
           '<td><div class="rowbtns"><button class="btn ghost sm" data-open="'+i+'">Gestionar</button>'+
