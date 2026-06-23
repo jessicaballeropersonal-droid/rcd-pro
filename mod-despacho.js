@@ -128,6 +128,10 @@ window.RCD_MODULOS.despacho = function(el, ctx){
         '<div class="field"><label>Fecha</label><input type="date" id="s_fecha" value="'+(nuevo?'':esc(s.fecha||''))+'"></div>'+
       '</div>'+
       '<div class="field"><label>Cantidad declarada (t)</label><input id="s_cant" class="cellnum" style="width:160px" value="'+(nuevo?'':numEs(s.cantidad_declarada))+'"></div>'+
+      '<div class="field"><label>Transporte</label><select id="s_transp">'+
+        '<option value="nosotros"'+(nuevo||s.transporte!=='cliente'?' selected':'')+'>Nosotros transportamos (cobra transporte)</option>'+
+        '<option value="cliente"'+(!nuevo&&s.transporte==='cliente'?' selected':'')+'>Cliente envia sus volquetas (sin cobro de transporte)</option>'+
+      '</select><div class="note">Si el cliente envia sus volquetas, se generan ordenes igual pero no se cobra transporte ni se paga volquetero.</div></div>'+
       '<div class="field"><label>Tamano requerido (opcional)</label><select id="s_tam"><option value="">Cualquiera</option>'+
         tams.map(t=>'<option value="'+t.id+'"'+(!nuevo&&s.tamano_id===t.id?' selected':'')+'>'+esc(t.nombre)+'</option>').join('')+
       '</select><div class="note">Si lo defines, las ordenes solo aceptaran vehiculos de ese tamano (salvo excepcion).</div></div>'+
@@ -159,9 +163,10 @@ window.RCD_MODULOS.despacho = function(el, ctx){
           p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:nuevo?null:s.id,
           p_obra_id:selObra.value, p_tipo:'despacho', p_producto_id:selProd.value,
           p_cantidad:parseNum(inpCant.value), p_fecha:v(el,'s_fecha')||null, p_observaciones:v(el,'s_obs'),
-          p_tamano_id:el.querySelector('#s_tam').value||null}));
+          p_tamano_id:el.querySelector('#s_tam').value||null,
+          p_transporte:el.querySelector('#s_transp').value||'nosotros'}));
         if(r==='OK'){ ctx.toast('Solicitud guardada'); listaSol(); return; }
-        ctx.toast(r==='OBRA_NO_COTIZADA'?'Esa obra no tiene cotizacion aceptada.':(r==='PRODUCTO_VACIO'?'Selecciona el producto.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.')),'error');
+        ctx.toast(r==='SALDO_AGOTADO'?'Obra bloqueada: el anticipo se agoto. Registra un abono o pide al administrador desbloquear en Facturacion.':(r==='OBRA_NO_COTIZADA'?'Esa obra no tiene cotizacion aceptada.':(r==='PRODUCTO_VACIO'?'Selecciona el producto.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.'))),'error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Guardar';
     };
@@ -176,9 +181,12 @@ window.RCD_MODULOS.despacho = function(el, ctx){
   }
 
   // ===================== ORDENES (drill-down de una solicitud) =====================
-  function accionesOrden(o,i){
-    let h='';
-    if(o.estado==='pendiente' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button><button class="btn ghost sm" data-oofe="'+i+'">Ofertar</button><button class="btn ghost sm" data-opar="'+i+'">Partir</button>';
+  function accionesOrden(o,i,s){
+    let h=''; const esCli=(s&&s.transporte==='cliente');
+    if(o.estado==='pendiente' && pEditar){
+      h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button>';
+      if(!esCli) h+='<button class="btn ghost sm" data-oofe="'+i+'">Ofertar</button><button class="btn ghost sm" data-opar="'+i+'">Partir</button>';
+    }
     if(o.estado==='ofertada' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button><button class="btn ghost sm" data-olib="'+i+'">Liberar</button>';
     if(o.estado==='asignada' && pEditar) h+='<button class="btn ghost sm" data-oruta="'+i+'">En ruta</button><button class="btn ghost sm" data-olib="'+i+'">Liberar</button>';
     if(o.estado==='en_ruta' && pEditar) h+='<button class="btn ghost sm" data-ocomp="'+i+'">Completar</button>';
@@ -210,7 +218,7 @@ window.RCD_MODULOS.despacho = function(el, ctx){
           '<td class="mono">'+(o.placa?esc(o.placa):'<span style="color:var(--muted)">-</span>')+'</td>'+
           '<td>'+esc(o.volquetero||'')+'</td>'+
           '<td>'+badgeOrden(o.estado)+'</td>'+
-          '<td><div class="rowbtns">'+accionesOrden(o,i)+'</div></td></tr>'; }).join('')+'</table>'
+          '<td><div class="rowbtns">'+accionesOrden(o,i,s)+'</div></td></tr>'; }).join('')+'</table>'
         : '<div class="empty">Sin ordenes. Usa "Generar ordenes".</div>')+
       '<div class="note">Cada orden es un viaje. Las asignadas/en ruta se completan al despachar (pestana Despachar).</div>'+
       '</div>';
