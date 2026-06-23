@@ -109,7 +109,7 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       const mod=v(el,'cr_mod'); const cupo=parseNum(v(el,'cr_cupo'))||0;
       const btn=f.querySelector('#cr_save'); btn.disabled=true; btn.textContent='Guardando...';
       try{ const r=scalar(await ctx.rpc('rcd_obra_credito_set',{p_usuario_id:ctx.ses.id,p_obra_id:obraSel.obra_id,p_modalidad:mod,p_cupo:cupo}));
-        if(r==='OK'){ ctx.toast('Modalidad actualizada'); antView(); return; }
+        if(r==='OK'){ ctx.log('Facturacion','Modalidad de obra', (obraSel.obra||'')+': '+mod+(mod==='credito'?' (cupo '+numEs(cupo)+')':'')); ctx.toast('Modalidad actualizada'); antView(); return; }
         else if(r==='SOLO_ADMIN'){ ctx.toast('Solo el administrador puede configurar credito.','error'); }
         else ctx.toast('No se pudo.','error');
       }catch(e){ ctx.toast('Error.','error'); }
@@ -143,7 +143,7 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
         if(r==='SIN_PERMISO'){ ctx.toast('No tienes permiso.','error'); }
         else if(r==='FALTAN_DATOS'){ ctx.toast('Faltan datos.','error'); }
         else if(r==='FALTA_FACTURA'){ ctx.toast('El abono necesita el N.º de factura.','error'); }
-        else { ctx.toast(tipo==='abono'?'Abono registrado':'Anticipo registrado'); antView(); return; }
+        else { ctx.log('Facturacion', tipo==='abono'?'Abono registrado':'Anticipo registrado', (obraSel.obra||'')+': '+numEs(monto)+(tipo==='abono'?' (fact. '+(v(el,'ab_ref')||'')+')':'')); ctx.toast(tipo==='abono'?'Abono registrado':'Anticipo registrado'); antView(); return; }
       }catch(e){ ctx.toast('Error al guardar.','error'); }
       btn.disabled=false; btn.textContent='Guardar';
     };
@@ -152,14 +152,14 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
   async function anularAbono(id){
     const ok=await ctx.confirm('¿Anular este abono?'); if(!ok) return;
     try{ const r=scalar(await ctx.rpc('rcd_anticipo_anular',{p_usuario_id:ctx.ses.id,p_id:id}));
-      if(r==='OK'){ ctx.toast('Abono anulado'); antView(); } else ctx.toast('No se pudo.','error');
+      if(r==='OK'){ ctx.log('Facturacion','Abono anulado', (obraSel.obra||'')); ctx.toast('Abono anulado'); antView(); } else ctx.toast('No se pudo.','error');
     }catch(e){ ctx.toast('Error.','error'); }
   }
 
   async function desbloquear(){
     const ok=await ctx.confirm('¿Desbloquear esta obra para permitir ordenes con saldo en cero o negativo?'); if(!ok) return;
     try{ const r=scalar(await ctx.rpc('rcd_obra_desbloquear',{p_usuario_id:ctx.ses.id,p_obra_id:obraSel.obra_id}));
-      if(r==='OK'){ ctx.toast('Obra desbloqueada'); antView(); }
+      if(r==='OK'){ ctx.log('Facturacion','Obra desbloqueada', (obraSel.obra||'')); ctx.toast('Obra desbloqueada'); antView(); }
       else if(r==='SOLO_ADMIN'){ ctx.toast('Solo el administrador puede desbloquear.','error'); }
       else ctx.toast('No se pudo.','error');
     }catch(e){ ctx.toast('Error.','error'); }
