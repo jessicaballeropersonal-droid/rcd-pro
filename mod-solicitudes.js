@@ -183,9 +183,12 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
       SIN_TAMANO_MITAD:'No existe un tamano que sea la mitad; no se puede partir.',
       ORDEN_NO_LIBERABLE:'Esa orden no se puede liberar (solo ofertadas o asignadas).'})[r] || 'No se pudo completar la accion.';
   }
-  function accionesOrden(o,i){
-    let h='';
-    if(o.estado==='pendiente' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button><button class="btn ghost sm" data-oofe="'+i+'">Ofertar</button><button class="btn ghost sm" data-opar="'+i+'">Partir</button>';
+  function accionesOrden(o,i,s){
+    let h=''; const esCli=(s&&s.transporte==='cliente');
+    if(o.estado==='pendiente' && pEditar){
+      h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button>';
+      if(!esCli) h+='<button class="btn ghost sm" data-oofe="'+i+'">Ofertar</button><button class="btn ghost sm" data-opar="'+i+'">Partir</button>';
+    }
     if(o.estado==='ofertada' && pEditar) h+='<button class="btn ghost sm" data-oasg="'+i+'">Asignar</button><button class="btn ghost sm" data-olib="'+i+'">Liberar</button>';
     if(o.estado==='asignada' && pEditar) h+='<button class="btn ghost sm" data-oruta="'+i+'">En ruta</button><button class="btn ghost sm" data-olib="'+i+'">Liberar</button>';
     if(o.estado==='en_ruta' && pEditar) h+='<button class="btn ghost sm" data-ocomp="'+i+'">Completar</button>';
@@ -223,7 +226,7 @@ window.RCD_MODULOS.solicitudes = function(el, ctx){
           '<td class="mono">'+(o.placa?esc(o.placa):'<span style="color:var(--muted)">-</span>')+'</td>'+
           '<td>'+esc(o.volquetero||'')+'</td>'+
           '<td>'+badgeOrden(o.estado)+'</td>'+
-          '<td><div class="rowbtns">'+accionesOrden(o,i)+'</div></td></tr>'; }).join('')+'</table>'
+          '<td><div class="rowbtns">'+accionesOrden(o,i,s)+'</div></td></tr>'; }).join('')+'</table>'
         : '<div class="empty">Sin ordenes. Acepta la solicitud y usa "Generar ordenes".</div>')+
       '<div class="note">Cada orden es un viaje. Pendiente: Asignar (vehiculo del mismo tamano), Ofertar (la acepta un volquetero), o Partir (1 grande -> 2 de la mitad, lo autorizas tu). El vehiculo se libera al pasar a "En ruta".</div>'+
       '</div>';
