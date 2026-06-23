@@ -44,7 +44,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   async function anular(c){
     if(!(await ctx.confirm('Anular la cotizacion '+(c.numero||'')+'? Se ocultara, pero el historico queda.'))) return;
     try{ const r=scalar(await ctx.rpc('rcd_cotizacion_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:c.id}));
-      if(r==='OK'){ ctx.toast('Cotizacion anulada'); lista(); return; }
+      if(r==='OK'){ ctx.log('Cotizaciones','Cotizacion anulada', (c.numero||'')+' '+(c.cliente||'')); ctx.toast('Cotizacion anulada'); lista(); return; }
       ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.','error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
@@ -52,7 +52,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   // ===================== EDITOR =====================
   async function abrirEditor(cotId){
     const st={ id:null, numero:'', cliente_id:'', cliente_nombre:'', obra_id:'', obra:'', comuna_id:'', municipio_id:'', fecha:'', valida_hasta:'',
-               observaciones:'', estado:'borrador', lineas:[], productos:[], items:[], volqs:[], aliados:[], tarifasNew:[], clientes:[], obrasOpts:[] };
+               observaciones:'', estado:'borrador', lineas:[], productos:[], items:[], volqs:[], aliados:[], tarifasRec:[], tarifasEnt:[], clientes:[], obrasOpts:[] };
     try{ const r=await ctx.rpc('rcd_clientes_lista',{p_gestor_id:ctx.ses.gestor_id}); st.clientes=Array.isArray(r)?r:[]; }catch(e){}
 
     if(cotId){
@@ -65,7 +65,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
         const _ob=st.obrasOpts.find(o=>o.id===st.obra_id); if(_ob){ st.municipio_id=_ob.municipio_id||''; if(!st.comuna_id) st.comuna_id=_ob.comuna_id||''; }
         await cargarContexto(st);
         const lins=await ctx.rpc('rcd_cotizacion_lineas_get',{p_cotizacion_id:cotId});
-        st.lineas=(Array.isArray(lins)?lins:[]).map(l=>({tipo:l.tipo,descripcion:l.descripcion,item_id:l.item_id||'',producto_id:l.producto_id||'',tamano_id:l.tamano_id||'',destino_tipo:l.destino_tipo||'',destino_aliado_id:l.destino_aliado_id||'',cantidad:l.cantidad,precio_unit:l.precio_unit,aplica_iva:l.aplica_iva,toneladas:''}));
+        st.lineas=(Array.isArray(lins)?lins:[]).map(l=>({tipo:l.tipo,descripcion:l.descripcion,item_id:l.item_id||'',producto_id:l.producto_id||'',tamano_id:l.tamano_id||'',destino_tipo:l.destino_tipo||'',destino_aliado_id:l.destino_aliado_id||'',direccion:l.direccion||'',cantidad:l.cantidad,precio_unit:l.precio_unit,aplica_iva:l.aplica_iva,toneladas:''}));
       }catch(e){ ctx.toast('No se pudo cargar la cotizacion.','error'); }
     }
     renderEditor(st);
@@ -75,8 +75,10 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     try{ const r=await ctx.rpc('rcd_items_lista',{p_gestor_id:ctx.ses.gestor_id}); st.items=(Array.isArray(r)?r:[]).filter(x=>x.activo!==false); }catch(e){ st.items=[]; }
     try{ const r=await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); st.volqs=(Array.isArray(r)?r:[]).filter(x=>x.activa!==false); }catch(e){ st.volqs=[]; }
     try{ const r=await ctx.rpc('rcd_aliados_lista',{p_gestor_id:ctx.ses.gestor_id}); st.aliados=(Array.isArray(r)?r:[]).filter(a=>a.activo!==false); }catch(e){ st.aliados=[]; }
-    if(st.municipio_id){ try{ const r=await ctx.rpc('rcd_tarifas_lista',{p_gestor_id:ctx.ses.gestor_id,p_municipio_id:st.municipio_id,p_direccion:'recoleccion'}); st.tarifasNew=Array.isArray(r)?r:[]; }catch(e){ st.tarifasNew=[]; } }
-    else st.tarifasNew=[];
+    if(st.municipio_id){
+      try{ const r=await ctx.rpc('rcd_tarifas_lista',{p_gestor_id:ctx.ses.gestor_id,p_municipio_id:st.municipio_id,p_direccion:'recoleccion'}); st.tarifasRec=Array.isArray(r)?r:[]; }catch(e){ st.tarifasRec=[]; }
+      try{ const r=await ctx.rpc('rcd_tarifas_lista',{p_gestor_id:ctx.ses.gestor_id,p_municipio_id:st.municipio_id,p_direccion:'entrega'}); st.tarifasEnt=Array.isArray(r)?r:[]; }catch(e){ st.tarifasEnt=[]; }
+    } else { st.tarifasRec=[]; st.tarifasEnt=[]; }
   }
 
   function editable(st){ return (st.estado==='borrador') && (pCrear||pEditar); }
@@ -251,9 +253,9 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   }
   function cambiarTipo(st,i,tipo){
     const l=st.lineas[i]; l.tipo=tipo;
-    l.item_id=''; l.producto_id=''; l.tamano_id=''; l.destino_tipo=''; l.destino_aliado_id=''; l.toneladas=''; l.cantidad=0; l.precio_unit=0;
+    l.item_id=''; l.producto_id=''; l.tamano_id=''; l.destino_tipo=''; l.destino_aliado_id=''; l.direccion=''; l.toneladas=''; l.cantidad=0; l.precio_unit=0;
     if(tipo==='item'){ l.descripcion=''; l.aplica_iva=true; }
-    else { l.descripcion='Transporte'; l.aplica_iva=false; }
+    else { l.descripcion='Transporte'; l.direccion='recoleccion'; l.aplica_iva=false; }
   }
   function aplicarItem(st,i,item_id){
     const l=st.lineas[i], it=(st.items||[]).find(x=>x.id===item_id);
@@ -265,13 +267,15 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     const vq=(st.volqs||[]).find(x=>x.id===l.tamano_id), cap=vq?(+vq.capacidad_t||0):0;
     const ton=parseNum(l.toneladas)||0;
     l.cantidad=(cap>0 && ton>0)?Math.ceil(ton/cap):0;
-    const t=(st.tarifasNew||[]).find(x=> x.tamano_id===l.tamano_id
+    const set=(l.direccion==='entrega')?(st.tarifasEnt||[]):(st.tarifasRec||[]);
+    const t=set.find(x=> x.tamano_id===l.tamano_id
         && ((x.comuna_id||'')===(st.comuna_id||''))
         && x.destino_tipo===(l.destino_tipo||'nuestro')
         && ((x.destino_aliado_id||'')===(l.destino_aliado_id||'')) );
     l.precio_unit=t?(+t.precio_cliente||0):0;
     const dl=destinosDe(st).find(d=>d.tipo===(l.destino_tipo||'nuestro') && (d.aliado||'')===(l.destino_aliado_id||''));
-    l.descripcion='Transporte '+(vq?vq.nombre:'')+(dl?(' -> '+dl.label):'');
+    const sent=(l.direccion==='entrega')?'Entrega':'Recoleccion';
+    l.descripcion=sent+' '+(vq?vq.nombre:'')+(dl?(' -> '+dl.label):'');
   }
   function updateRowTransport(st,i){
     recalcTransporte(st,i); const l=st.lineas[i];
@@ -289,6 +293,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
       const dests=destinosDe(st), destVal=(l.destino_tipo||'nuestro')+'|'+(l.destino_aliado_id||'');
       detalle = dis ? esc(l.descripcion||'Transporte')
         : '<div style="display:flex;flex-direction:column;gap:4px">'+
+          '<select data-dir="'+i+'"><option value="recoleccion"'+((l.direccion||'recoleccion')==='recoleccion'?' selected':'')+'>Recoleccion (recoge RCD)</option><option value="entrega"'+(l.direccion==='entrega'?' selected':'')+'>Entrega (lleva producto)</option></select>'+
           '<select data-tam="'+i+'"><option value="">Tamano...</option>'+(st.volqs||[]).map(t=>'<option value="'+t.id+'"'+(l.tamano_id===t.id?' selected':'')+'>'+esc(t.nombre)+'</option>').join('')+'</select>'+
           '<select data-dest="'+i+'">'+dests.map(d=>'<option value="'+d.tipo+'|'+(d.aliado||'')+'"'+(destVal===(d.tipo+'|'+(d.aliado||''))?' selected':'')+'>'+esc(d.label)+'</option>').join('')+'</select>'+
           '<input class="cellnum" data-ton="'+i+'" placeholder="Toneladas" value="'+(l.toneladas!==''&&l.toneladas!=null?numEs(l.toneladas):'')+'" style="width:120px">'+
@@ -334,6 +339,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
         const tSel=box.querySelector('[data-tipo="'+i+'"]'); if(tSel) tSel.onchange=()=>{ cambiarTipo(st,i,tSel.value); renderLineas(st); };
         const iSel=box.querySelector('[data-item="'+i+'"]'); if(iSel) iSel.onchange=()=>{ aplicarItem(st,i,iSel.value); renderLineas(st); };
         const tamSel=box.querySelector('[data-tam="'+i+'"]'); if(tamSel) tamSel.onchange=()=>{ st.lineas[i].tamano_id=tamSel.value; recalcTransporte(st,i); renderLineas(st); };
+        const dirSel=box.querySelector('[data-dir="'+i+'"]'); if(dirSel) dirSel.onchange=()=>{ st.lineas[i].direccion=dirSel.value; recalcTransporte(st,i); renderLineas(st); };
         const dSel=box.querySelector('[data-dest="'+i+'"]'); if(dSel) dSel.onchange=()=>{ const p=dSel.value.split('|'); st.lineas[i].destino_tipo=p[0]; st.lineas[i].destino_aliado_id=p[1]||''; recalcTransporte(st,i); renderLineas(st); };
         const ton=box.querySelector('[data-ton="'+i+'"]'); if(ton) ton.oninput=()=>{ st.lineas[i].toneladas=ton.value; updateRowTransport(st,i); };
         const c=box.querySelector('[data-cant="'+i+'"]'); if(c) c.oninput=()=>{ st.lineas[i].cantidad=parseNum(c.value); recalc(st); };
@@ -364,7 +370,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     }
     const btn=el.querySelector('#bGuardar'); if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
     const lineas=st.lineas.map(l=>({tipo:l.tipo, descripcion:l.descripcion, item_id:l.item_id||'', producto_id:l.producto_id||'', tamano_id:l.tamano_id||'',
-      destino_tipo:l.destino_tipo||'', destino_aliado_id:l.destino_aliado_id||'',
+      destino_tipo:l.destino_tipo||'', destino_aliado_id:l.destino_aliado_id||'', direccion:l.direccion||'',
       cantidad:+l.cantidad||0, precio_unit:+l.precio_unit||0, aplica_iva:!!l.aplica_iva}));
     try{
       const res=scalar(await ctx.rpc('rcd_cotizacion_guardar',{
@@ -373,7 +379,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
         p_observaciones:st.observaciones, p_lineas:lineas}));
       if(res==='OBRA_VACIA'){ ctx.toast('Selecciona la obra.','error'); }
       else if(res==='SIN_PERMISO'){ ctx.toast('No tienes permiso.','error'); }
-      else { ctx.toast('Cotizacion guardada'); abrirEditor(res); return; }
+      else { ctx.log('Cotizaciones','Cotizacion guardada', ''); ctx.toast('Cotizacion guardada'); abrirEditor(res); return; }
     }catch(e){ ctx.toast('Error de conexion al guardar.','error'); }
     if(btn){ btn.disabled=false; btn.textContent='Guardar'; }
   }
@@ -382,7 +388,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     const msg = estado==='aceptada' ? 'Aceptar esta cotizacion? Se habilitara la obra para solicitudes.' : 'Marcar esta cotizacion como rechazada?';
     if(!(await ctx.confirm(msg))) return;
     try{ const r=scalar(await ctx.rpc('rcd_cotizacion_estado',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:st.id,p_estado:estado}));
-      if(r==='OK'){ ctx.toast(estado==='aceptada'?'Cotizacion aceptada, obra habilitada':'Cotizacion rechazada'); abrirEditor(st.id); return; }
+      if(r==='OK'){ ctx.log('Cotizaciones', estado==='aceptada'?'Cotizacion aceptada':'Cotizacion rechazada', (st.numero||'')+' '+(st.cliente||'')); ctx.toast(estado==='aceptada'?'Cotizacion aceptada, obra habilitada':'Cotizacion rechazada'); abrirEditor(st.id); return; }
       ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo cambiar el estado.','error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
