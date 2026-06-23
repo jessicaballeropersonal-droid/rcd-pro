@@ -173,7 +173,8 @@
     url: SUPABASE_URL,
     headers,
     rpc: (fn, body) => fetch(SUPABASE_URL+'/rest/v1/rpc/'+fn, {method:'POST', headers, body:JSON.stringify(body||{})}).then(r=>r.json()),
-    can: (clave, accion) => { const m = MENU.find(x=>x.clave===clave); return m ? !!m[accion] : false; }
+    can: (clave, accion) => { const m = MENU.find(x=>x.clave===clave); return m ? !!m[accion] : false; },
+    log: (modulo, accion, detalle) => { try{ fetch(SUPABASE_URL+'/rest/v1/rpc/rcd_actividad_registrar', {method:'POST', headers, body:JSON.stringify({p_usuario_id:ses.id, p_gestor_id:ses.gestor_id, p_modulo:modulo, p_accion:accion, p_detalle:detalle||''})}).catch(()=>{}); }catch(e){} }
   };
 
   // Aviso tipo toast (ok / error / info)
