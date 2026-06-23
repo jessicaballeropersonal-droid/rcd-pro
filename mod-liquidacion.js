@@ -124,7 +124,7 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
     try{ const r=scalar(await ctx.rpc('rcd_liquidacion_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_obra_id:cob.obra_id,p_desde:cob.desde,p_hasta:cob.hasta,p_es_final:cob.es_final,p_lineas:lineas}));
       if(r==='SIN_PERMISO'){ ctx.toast('No tienes permiso.','error'); }
       else if(r==='FALTAN_DATOS'){ ctx.toast('Faltan datos.','error'); }
-      else { ctx.toast('Liquidacion guardada y enviada a Facturacion'); cob.generado=false; cob.es_final=false; cob.obra_id=''; cob.desde=''; cobView('his'); return; }
+      else { ctx.log('Liquidacion','Liquidacion de cobro guardada', 'Periodo '+(cob.desde||'')+' a '+(cob.hasta||'')+(cob.es_final?' (final)':'')); ctx.toast('Liquidacion guardada y enviada a Facturacion'); cob.generado=false; cob.es_final=false; cob.obra_id=''; cob.desde=''; cobView('his'); return; }
     }catch(e){ ctx.toast('Error al guardar.','error'); }
     btn.disabled=false; btn.textContent='Guardar liquidacion';
   }
@@ -230,7 +230,7 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
     try{ const r=scalar(await ctx.rpc('rcd_liq_volq_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_volquetero_id:vol.volquetero_id,p_desde:vol.desde,p_hasta:vol.hasta,p_lineas:lineas}));
       if(r==='SIN_PERMISO'){ ctx.toast('No tienes permiso.','error'); }
       else if(r==='FALTAN_DATOS'){ ctx.toast('Faltan datos.','error'); }
-      else { ctx.toast('Pago de volquetero guardado'); vol.generado=false; vol.volquetero_id=''; vol.desde=''; volView('his'); return; }
+      else { ctx.log('Liquidacion','Pago de volquetero guardado', 'Periodo '+(vol.desde||'')+' a '+(vol.hasta||'')); ctx.toast('Pago de volquetero guardado'); vol.generado=false; vol.volquetero_id=''; vol.desde=''; volView('his'); return; }
     }catch(e){ ctx.toast('Error al guardar.','error'); }
     btn.disabled=false; btn.textContent='Guardar liquidacion';
   }
