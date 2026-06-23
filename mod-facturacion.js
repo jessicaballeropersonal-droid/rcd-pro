@@ -61,7 +61,7 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
         '<h3 style="margin:0">'+esc(obraSel.obra)+' · '+esc(obraSel.cliente||'')+'</h3>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
-          (pCrear?'<button class="btn primary sm" id="aAdd">Registrar abono</button>':'')+
+          (pCrear?'<button class="btn primary sm" id="aAdd">Registrar dinero</button>':'')+
           (esAdmin?'<button class="btn ghost sm" id="aCred">Configurar credito</button>':'')+
           (blq&&esAdmin?'<button class="btn sm" id="aUnlock" style="background:var(--orange);color:#fff;border:none">Desbloquear (admin)</button>':'')+
         '</div>'+
@@ -76,10 +76,12 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
         '<div style="background:'+(disponible<=0?'#FBE6E3':'var(--esc)')+';color:'+(disponible<=0?'#A02114':'#fff')+';border-radius:10px;padding:10px"><span style="font-size:12px;opacity:.85">'+(modalidad==='credito'?'Disponible (saldo+cupo)':'Saldo disponible')+'</span><br><span class="mono" style="font-size:17px;font-weight:800">'+money(disponible)+'</span></div>'+
       '</div>'+
       '<div id="aForm"></div><div id="cForm"></div>'+
-      '<h3 style="margin:6px 0 0">Abonos</h3>'+
-      (abonos.length?'<table class="mtable"><tr><th>Fecha</th><th style="text-align:right">Monto</th><th>Factura</th>'+(pCrear?'<th></th>':'')+'</tr>'+
-        abonos.map(a=>'<tr><td class="mono">'+esc(a.fecha||'')+'</td><td style="text-align:right" class="mono">'+money(a.monto)+'</td>'+
-          '<td>'+(a.con_factura?'<span class="badge ok">'+esc(a.factura_ref||'con factura')+'</span>':'<span class="badge off">sin factura</span>')+'</td>'+
+      '<h3 style="margin:6px 0 0">Anticipos y abonos</h3>'+
+      (abonos.length?'<table class="mtable"><tr><th>Fecha</th><th>Tipo</th><th style="text-align:right">Monto</th><th>Factura</th>'+(pCrear?'<th></th>':'')+'</tr>'+
+        abonos.map(a=>'<tr><td class="mono">'+esc(a.fecha||'')+'</td>'+
+          '<td>'+(a.tipo==='abono'?'<span class="badge esc">Abono</span>':'<span class="badge off">Anticipo</span>')+'</td>'+
+          '<td style="text-align:right" class="mono">'+money(a.monto)+'</td>'+
+          '<td>'+(a.con_factura?'<span class="badge ok">'+esc(a.factura_ref||'con factura')+'</span>':'<span style="color:var(--muted);font-size:12px">—</span>')+'</td>'+
           (pCrear?'<td><button class="btn ghost sm" data-anu="'+a.id+'">Anular</button></td>':'')+'</tr>').join('')+'</table>'
         :'<div class="empty">Sin abonos registrados.</div>')+
       '<div class="note">Saldo: '+money(obraSel.saldo)+' · Consumido a la fecha: <b>'+money(obraSel.consumido)+'</b> (ordenes a precio de cotizacion, con IVA).</div>'+
@@ -91,6 +93,7 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
   }
 
   function creditoForm(modActual,cupoActual){
+    const fa=el.querySelector('#aForm'); if(fa) fa.innerHTML='';
     const f=el.querySelector('#cForm'); if(!f) return;
     f.innerHTML='<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin:8px 0">'+
       '<div style="font-weight:700;margin-bottom:8px">Modalidad de la obra</div>'+
@@ -115,27 +118,34 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
   }
 
   function abonoForm(){
+    const fc=el.querySelector('#cForm'); if(fc) fc.innerHTML='';
     const f=el.querySelector('#aForm'); if(!f) return;
     const hoy=new Date().toISOString().slice(0,10);
     f.innerHTML='<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin:8px 0">'+
       '<div class="row2"><div class="field"><label>Fecha</label><input type="date" id="ab_fecha" value="'+hoy+'"></div>'+
       '<div class="field"><label>Monto</label><input id="ab_monto" inputmode="decimal" placeholder="0"></div></div>'+
-      '<div class="chk" style="margin:4px 0 8px"><input type="checkbox" id="ab_cf" style="width:auto"> <label for="ab_cf" style="margin:0;text-transform:none;letter-spacing:0;font-family:inherit;font-size:13px;color:var(--ink)">Este abono tiene factura</label></div>'+
-      '<div class="field" id="ab_refwrap" style="display:none"><label>N.º factura (TNS)</label><input id="ab_ref" placeholder="FV-...."></div>'+
-      '<div style="display:flex;gap:8px"><button class="btn primary sm" id="ab_save">Guardar abono</button><button class="btn ghost sm" id="ab_cancel">Cancelar</button></div>'+
+      '<div class="field"><label>Tipo</label><select id="ab_tipo">'+
+        '<option value="anticipo">Anticipo (por adelantado, sin factura)</option>'+
+        '<option value="abono">Abono / pago (contra factura)</option></select></div>'+
+      '<div class="field" id="ab_refwrap" style="display:none"><label>N.º factura</label><input id="ab_ref" placeholder="FV-...."></div>'+
+      '<div class="note">El anticipo se factura despues, al facturar el periodo. El abono entra contra una factura ya emitida.</div>'+
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary sm" id="ab_save">Guardar</button><button class="btn ghost sm" id="ab_cancel">Cancelar</button></div>'+
       '</div>';
-    const cf=f.querySelector('#ab_cf'); cf.onchange=()=>{ f.querySelector('#ab_refwrap').style.display=cf.checked?'block':'none'; };
+    const tp=f.querySelector('#ab_tipo'); tp.onchange=()=>{ f.querySelector('#ab_refwrap').style.display=(tp.value==='abono')?'block':'none'; };
     f.querySelector('#ab_cancel').onclick=()=>{ f.innerHTML=''; };
     f.querySelector('#ab_save').onclick=async()=>{
       const monto=parseNum(v(el,'ab_monto'));
       if(!monto||monto<=0){ ctx.toast('Pon un monto valido.','error'); return; }
+      const tipo=tp.value;
+      if(tipo==='abono' && !(v(el,'ab_ref')||'').trim()){ ctx.toast('El abono necesita el N.º de factura.','error'); return; }
       const btn=f.querySelector('#ab_save'); btn.disabled=true; btn.textContent='Guardando...';
-      try{ const r=scalar(await ctx.rpc('rcd_anticipo_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_obra_id:obraSel.obra_id,p_fecha:v(el,'ab_fecha'),p_monto:monto,p_con_factura:cf.checked,p_factura_ref:cf.checked?v(el,'ab_ref'):'',p_observacion:''}));
+      try{ const r=scalar(await ctx.rpc('rcd_anticipo_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_obra_id:obraSel.obra_id,p_fecha:v(el,'ab_fecha'),p_monto:monto,p_tipo:tipo,p_factura_ref:(tipo==='abono'?v(el,'ab_ref'):''),p_observacion:''}));
         if(r==='SIN_PERMISO'){ ctx.toast('No tienes permiso.','error'); }
         else if(r==='FALTAN_DATOS'){ ctx.toast('Faltan datos.','error'); }
-        else { ctx.toast('Abono registrado'); antView(); return; }
+        else if(r==='FALTA_FACTURA'){ ctx.toast('El abono necesita el N.º de factura.','error'); }
+        else { ctx.toast(tipo==='abono'?'Abono registrado':'Anticipo registrado'); antView(); return; }
       }catch(e){ ctx.toast('Error al guardar.','error'); }
-      btn.disabled=false; btn.textContent='Guardar abono';
+      btn.disabled=false; btn.textContent='Guardar';
     };
   }
 
