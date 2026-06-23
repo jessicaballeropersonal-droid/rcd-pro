@@ -136,15 +136,16 @@ module.exports = async (req, res) => {
         res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')) }); return;
       }
       const arr = Array.isArray(j2.data) ? j2.data : [];
-      const lista = arr
-        .filter(x => (x.cliente === undefined || x.cliente === null || String(x.cliente).toUpperCase() !== 'N'))
-        .map(x => ({
-          codigo: x.codigo, nit: x.nit, nombre: x.nombre,
-          natJuridica: x.natJuridica, codigoCiudad: x.codigoCiudad,
-          nombreCiudad: x.nombreCiudad, telefono: x.telefono
-        }))
-        .filter(x => x.codigo || x.nit);
-      res.status(200).json({ok:true, clientes: lista}); return;
+      const esCliente = x => x.cliente !== undefined && x.cliente !== null && String(x.cliente).toUpperCase() === 'S';
+      let base = arr.filter(esCliente);
+      // Si TNS no devuelve el campo 'cliente' en el listado, no podemos distinguir: devolvemos marca para avisar.
+      const sinCampoCliente = arr.length > 0 && arr.every(x => x.cliente === undefined || x.cliente === null || x.cliente === '');
+      const lista = base.map(x => ({
+        codigo: x.codigo, nit: x.nit, nombre: x.nombre,
+        natJuridica: x.natJuridica, codigoCiudad: x.codigoCiudad,
+        nombreCiudad: x.nombreCiudad, telefono: x.telefono
+      })).filter(x => x.codigo || x.nit);
+      res.status(200).json({ok:true, clientes: lista, total_tns: arr.length, sin_campo_cliente: sinCampoCliente}); return;
     }
 
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
