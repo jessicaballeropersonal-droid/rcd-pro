@@ -121,6 +121,32 @@ module.exports = async (req, res) => {
       res.status(200).json({ok:true, materiales: lista}); return;
     }
 
+    // ---- Traer clientes de TNS (Tercero/Listar) ----
+    if(accion === 'traer_clientes'){
+      const lg = await tnsLogin(gestor_id, key);
+      if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      const filtro = encodeURIComponent(body.filtro || '');
+      let r2, j2=null;
+      try{
+        r2 = await fetch(lg.url+'/v2/tablas/Tercero/Listar?filtro='+filtro, {
+          method:'GET', headers:{'Authorization':'Bearer '+lg.token} });
+        const t2 = await r2.text(); try{ j2 = JSON.parse(t2); }catch{ j2 = null; }
+      }catch(e){ res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return; }
+      if(!(r2.ok && j2 && j2.status === true)){
+        res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')) }); return;
+      }
+      const arr = Array.isArray(j2.data) ? j2.data : [];
+      const lista = arr
+        .filter(x => (x.cliente === undefined || x.cliente === null || String(x.cliente).toUpperCase() !== 'N'))
+        .map(x => ({
+          codigo: x.codigo, nit: x.nit, nombre: x.nombre,
+          natJuridica: x.natJuridica, codigoCiudad: x.codigoCiudad,
+          nombreCiudad: x.nombreCiudad, telefono: x.telefono
+        }))
+        .filter(x => x.codigo || x.nit);
+      res.status(200).json({ok:true, clientes: lista}); return;
+    }
+
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
   } catch(e){
     res.status(200).json({ok:false, error: 'ERR:'+((e && e.message) || String(e)) });
