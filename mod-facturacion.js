@@ -19,11 +19,11 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       '<h2 style="font-size:20px;font-weight:800;margin:0 0 2px">Facturacion</h2>'+
       '<p class="lead" style="margin:0 0 14px">Anticipos y saldos por obra. La emision en TNS se activa en la siguiente fase.</p>'+
       '<div class="tabbar" id="fbar"></div><div id="fbody"></div></div>';
-    const tabs=[['ant','Anticipos / Saldos'],['cartera','Cartera'],['fact','Por facturar'],['emi','Emitidas'],['sync','Sincronizacion TNS'],['cfg','Configuracion']];
+    const tabs=[['ant','Anticipos / Saldos'],['cartera','Cartera'],['movs','Estado de cuenta'],['fact','Por facturar'],['emi','Emitidas'],['sync','Sincronizacion TNS'],['cfg','Configuracion']];
     const bar=el.querySelector('#fbar');
     bar.innerHTML=tabs.map(t=>'<button class="tab'+(t[0]===tab?' active':'')+'" data-k="'+t[0]+'">'+t[1]+'</button>').join('');
     bar.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ tab=b.dataset.k; shell(); });
-    if(tab==='ant') antView(); else if(tab==='cartera') carteraView(); else if(tab==='fact') factView(); else if(tab==='emi') emiView(); else if(tab==='sync') syncView(); else cfgView();
+    if(tab==='ant') antView(); else if(tab==='cartera') carteraView(); else if(tab==='movs') movsView(); else if(tab==='fact') factView(); else if(tab==='emi') emiView(); else if(tab==='sync') syncView(); else cfgView();
   }
   function body(){ return el.querySelector('#fbody'); }
 
@@ -101,7 +101,59 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
     det.style.display='';
   }
 
-  // ===================== ANTICIPOS / SALDOS =====================
+  // ===================== ESTADO DE CUENTA (movimientos TNS) =====================
+  let movsClientes=null, movsSel='';
+  async function movsView(){
+    const bd=body();
+    bd.innerHTML=
+      '<div class="mcard"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<h3 style="margin:0">Estado de cuenta (desde TNS)</h3>'+
+      '<span id="movSem" class="badge warn" style="display:none"></span></div>'+
+      '<div class="note" style="margin-top:6px">Todos los movimientos del cliente en TNS: facturas, pagos, notas y anticipos. Solo lectura.</div>'+
+      '<div id="movPick" style="margin-top:10px"><div class="loading">Cargando clientes...</div></div>'+
+      '<div id="movBody" style="margin-top:10px"></div></div>';
+
+    if(!movsClientes){
+      try{ const r=await ctx.rpc('rcd_tns_terceros_lista',{p_gestor_id:ctx.ses.gestor_id}); movsClientes=Array.isArray(r)?r:[]; }catch(e){ movsClientes=[]; }
+    }
+    const pick=bd.querySelector('#movPick');
+    if(!movsClientes.length){ pick.innerHTML='<div class="empty">No hay terceros con codigo TNS. Traelos en Sincronizacion TNS.</div>'; return; }
+    pick.innerHTML='<select id="movCli" style="width:100%"><option value="">— Elige un cliente —</option>'+
+      movsClientes.map(c=>'<option value="'+esc(c.cod_tercero)+'"'+(c.cod_tercero===movsSel?' selected':'')+'>'+esc(c.razon_social)+(c.nit?(' ('+esc(c.nit)+')'):'')+'</option>').join('')+'</select>';
+    const sel=bd.querySelector('#movCli');
+    sel.onchange=()=>{ movsSel=sel.value; if(movsSel) cargarMovs(); else bd.querySelector('#movBody').innerHTML=''; };
+    if(movsSel) cargarMovs();
+  }
+
+  function setMovSem(tipo,txt){ const s=el.querySelector('#movSem'); if(!s) return; s.style.display='inline-block'; s.className='badge '+(tipo==='ok'?'ok':(tipo==='off'?'danger':'warn')); s.textContent=txt; }
+
+  async function cargarMovs(){
+    const box=el.querySelector('#movBody'); if(!box) return;
+    box.innerHTML='<div class="loading">Consultando TNS...</div>'; setMovSem('warn','Consultando...');
+    let cfg={}; try{ cfg=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{}; }catch(e){}
+    try{
+      const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accion:'traer_movimientos',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,
+          codigosucursal:cfg.codigo_sucursal||'00',codcliente:movsSel})}).then(x=>x.json());
+      if(!(r&&r.ok)){ setMovSem('off','Error TNS'); box.innerHTML='<div class="note warn">TNS no respondio: '+esc((r&&r.error)||'error')+'</div>'; return; }
+      const hora=new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      setMovSem('ok','Sincronizado · '+hora);
+      const ms=r.movimientos||[];
+      box.innerHTML=
+        '<div class="row2" style="margin-bottom:4px">'+
+        '<div class="field" style="margin:0"><label>Facturado</label><div class="mono" style="font-size:16px;font-weight:800">'+money(r.facturado)+'</div></div>'+
+        '<div class="field" style="margin:0"><label>Pagado</label><div class="mono" style="font-size:16px;font-weight:800;color:#0B6B4F">'+money(r.pagado)+'</div></div>'+
+        '<div class="field" style="margin:0"><label>Saldo</label><div class="mono" style="font-size:16px;font-weight:800;color:'+((+r.saldo)>0?'#A02114':'#0B6B4F')+'">'+money(r.saldo)+'</div></div></div>'+
+        (ms.length?
+          '<table class="mtable"><tr><th>Fecha</th><th>Movimiento</th><th style="text-align:right">Debito</th><th style="text-align:right">Credito</th><th style="text-align:right">Saldo</th></tr>'+
+          ms.map(m=>'<tr><td class="mono">'+esc(m.fecha||'')+'</td>'+
+            '<td><span class="badge '+(m.tipo==='factura'?'':'ok')+'" style="font-size:10.5px">'+esc(m.etiqueta)+'</span> <span class="mono">'+esc(m.num||'')+'</span>'+(m.desc?('<br><span style="font-size:11px;color:var(--muted)">'+esc(m.desc)+'</span>'):'')+'</td>'+
+            '<td style="text-align:right" class="mono">'+(m.debito?money(m.debito):'—')+'</td>'+
+            '<td style="text-align:right" class="mono" style="color:#0B6B4F">'+(m.credito?money(m.credito):'—')+'</td>'+
+            '<td style="text-align:right" class="mono">'+money(m.saldo)+'</td></tr>').join('')+'</table>'
+          :'<div class="empty">Este cliente no tiene movimientos en TNS.</div>');
+    }catch(e){ setMovSem('off','Sin conexion'); box.innerHTML='<div class="note warn">Error de conexion.</div>'; }
+  }
   async function antView(){
     const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
     let rs=[]; try{ const r=await ctx.rpc('rcd_obras_saldos',{p_gestor_id:ctx.ses.gestor_id}); rs=Array.isArray(r)?r:[]; }catch(e){}
