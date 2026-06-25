@@ -448,7 +448,7 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       '<div class="note">Los materiales/productos ahora se sincronizan en <b>Parametros → Productos terminados</b>, donde cada uno muestra su estado TNS (verde si esta vinculado). Aqui ya no se gestionan.</div></div>'+
       '<div class="mcard"><h3 style="margin:0 0 4px">Clientes → tercero en TNS</h3>'+
       '<div class="note">Trae tus clientes de TNS (con su codigo, NIT y ciudad). Se emparejan por NIT con los de RCD Pro: si existe se actualiza, si no se crea.</div>'+
-      (pCrear?'<div style="margin-top:8px"><button class="btn ghost sm" id="bTraerCli">Traer clientes de TNS</button> <button class="btn ghost sm" id="bDiag">Ver campos (diagnostico)</button></div>':'')+
+      (pCrear?'<div style="margin-top:8px"><button class="btn ghost sm" id="bTraerCli">Traer clientes de TNS</button> <button class="btn ghost sm" id="bTraerTodos">Traer TODOS (pruebas)</button> <button class="btn ghost sm" id="bDiag">Ver campos (diagnostico)</button></div>':'')+
       '<div id="cliRes" class="note" style="display:none;margin-top:10px"></div>'+
       '<div id="diagRes" style="display:none;margin-top:10px"></div></div>';
 
@@ -472,6 +472,27 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
         else ctx.toast('No se pudieron importar.','error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Traer clientes de TNS';
+    };
+
+    const tt=bd.querySelector('#bTraerTodos'); if(tt) tt.onclick=async function(){
+      const btn=this, box=bd.querySelector('#cliRes'); btn.disabled=true; btn.textContent='Trayendo todos...';
+      try{
+        const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({accion:'traer_clientes',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,filtro:'',traer_todos:true})}).then(x=>x.json());
+        if(!(r&&r.ok)){ ctx.toast(r&&r.error==='SIN_CREDENCIALES'?'Primero conecta TNS en Configuracion.':('TNS: '+((r&&r.error)||'error')),'error'); btn.disabled=false; btn.textContent='Traer TODOS (pruebas)'; return; }
+        const cli=r.clientes||[];
+        if(!cli.length){ if(box){box.style.display='block'; box.className='note warn'; box.textContent='TNS no devolvio terceros.';} btn.disabled=false; btn.textContent='Traer TODOS (pruebas)'; return; }
+        btn.textContent='Importando '+cli.length+'...';
+        const imp=scalar(await ctx.rpc('rcd_tns_clientes_importar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_clientes:cli}));
+        if(typeof imp==='string' && imp.indexOf('OK:')===0){
+          const p=imp.split(':'); const creados=p[1]||'0', actualizados=p[2]||'0';
+          ctx.log('Facturacion TNS','Terceros importados (todos)', cli.length+' (nuevos '+creados+', act '+actualizados+')');
+          if(box){ box.style.display='block'; box.className='note'; box.textContent='Importados TODOS: '+cli.length+' terceros ('+creados+' nuevos, '+actualizados+' actualizados). Clave de portal 0000 por defecto.'; }
+          ctx.toast('Terceros importados (modo prueba)');
+        } else if(imp==='SOLO_ADMIN'){ ctx.toast('Solo el administrador.','error'); }
+        else ctx.toast('No se pudieron importar.','error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Traer TODOS (pruebas)';
     };
 
     const bd2=bd.querySelector('#bDiag'); if(bd2) bd2.onclick=async function(){
