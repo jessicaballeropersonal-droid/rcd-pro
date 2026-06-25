@@ -8,7 +8,7 @@ window.RCD_MODULOS = window.RCD_MODULOS || {};
 window.RCD_MODULOS.facturacion = function(el, ctx){
   const pCrear = ctx.can('facturacion','escribir');
   const esAdmin = (ctx.ses && ctx.ses.rol === 'Administrador');
-  function money(n){ return '$ '+numEs(Math.round(+n||0)); }
+  function money(n){ return '$ '+Math.round(+n||0).toLocaleString('es-CO'); }
   function row1(r){ return Array.isArray(r) ? (r[0]||null) : (r||null); }
   let tab='ant';
   let obraSel=null; // obra abierta en Anticipos
