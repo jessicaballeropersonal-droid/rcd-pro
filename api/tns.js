@@ -240,6 +240,25 @@ module.exports = async (req, res) => {
       res.status(200).json({ok:true, cartera}); return;
     }
 
+    // ---- Diagnostico: ver campos crudos de un tercero ----
+    if(accion === 'diag_tercero'){
+      const lg = await tnsLogin(gestor_id, key);
+      if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      const filtro = encodeURIComponent(body.filtro || '');
+      let r2, j2=null;
+      try{
+        r2 = await fetch(lg.url+'/v2/tablas/Tercero/Listar?filtro='+filtro, {
+          method:'GET', headers:{'Authorization':'Bearer '+lg.token} });
+        const t2 = await r2.text(); try{ j2 = JSON.parse(t2); }catch{ j2 = null; }
+      }catch(e){ res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return; }
+      if(!(r2.ok && j2 && j2.status === true)){
+        res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')) }); return;
+      }
+      const arr = Array.isArray(j2.data) ? j2.data : [];
+      const primero = arr[0] || {};
+      res.status(200).json({ok:true, total: arr.length, campos: Object.keys(primero), muestra: primero}); return;
+    }
+
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
   } catch(e){
     res.status(200).json({ok:false, error: 'ERR:'+((e && e.message) || String(e)) });
