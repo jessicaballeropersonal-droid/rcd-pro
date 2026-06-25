@@ -137,7 +137,8 @@ module.exports = async (req, res) => {
       }
       const arr = Array.isArray(j2.data) ? j2.data : [];
       const esCliente = x => x.cliente !== undefined && x.cliente !== null && String(x.cliente).toUpperCase() === 'S';
-      let base = arr.filter(esCliente);
+      const traerTodos = body.traer_todos === true;
+      let base = traerTodos ? arr : arr.filter(esCliente);
       // Si TNS no devuelve el campo 'cliente' en el listado, no podemos distinguir: devolvemos marca para avisar.
       const sinCampoCliente = arr.length > 0 && arr.every(x => x.cliente === undefined || x.cliente === null || x.cliente === '');
       const lista = base.map(x => ({
