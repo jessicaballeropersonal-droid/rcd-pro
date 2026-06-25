@@ -1,141 +1,297 @@
--- ============================================================
--- RCD PRO · PANEL DEL VOLQUETERO · Login doc+clave, tomar ofertas, ejecutar
--- Correr en Supabase SQL Editor. Clave por defecto '0000'.
--- Reutiliza rcd_vehiculo_elegible (la misma validacion del gestor).
--- ============================================================
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCD Pro · Portal del volquetero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#E7E7E3;--surface:#FFFFFF;--ink:#1A2B27;--muted:#6E7A77;--line:#D9E2DF;
+    --esc:#0F766E;--esc-soft:#E2F3F0;--esc-d:#0B4A45;--orange:#E8620A;--orange-d:#B8490A;--bad:#B91C1C;--ok:#0B6B4F;--amber:#854F0B;--amber-soft:#FAEEDA;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(1100px 500px at 50% -10%, #DCEAE7 0%, transparent 60%),var(--bg);
+    color:var(--ink);font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'JetBrains Mono',monospace}
+  .wraplogin{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px rgba(15,118,110,.12);overflow:hidden}
+  .top{background:var(--orange);height:7px}
+  .pad{padding:28px 28px 24px}
+  .brandbox{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:8px}
+  .wordmark{font-weight:900;font-size:34px;letter-spacing:-.02em;color:var(--esc-d);line-height:1}
+  .wordmark b{color:var(--orange)}
+  .sub{font-size:12px;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+  .field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;-webkit-appearance:none}
+  .field input:focus{outline:2px solid var(--orange);border-color:var(--orange)}
+  .enter{width:100%;background:var(--orange);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow';font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+  .enter:hover{background:var(--orange-d)}
+  .enter:disabled{opacity:.6;cursor:default}
+  .hint{margin-top:18px;background:var(--amber-soft);border:1px solid #F0D9A8;border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--amber);font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.5}
+  .err{margin-top:14px;background:#FBEAEA;border:1px solid #E7C2C2;border-radius:9px;padding:10px 12px;font-size:12.5px;color:var(--bad);text-align:center;display:none}
+  .err.show{display:block}
+  .hidden{display:none}
+  .appbar{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+  .who{display:flex;align-items:center;gap:10px}
+  .ava{width:36px;height:36px;border-radius:9px;background:#FCEEE4;color:#993C1D;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+  .who .nm{font-weight:700;font-size:14px;line-height:1.15}
+  .who .rl{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+  .salir{background:none;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-family:'Barlow';font-size:13px;color:var(--ink);cursor:pointer}
+  .container{max-width:560px;margin:0 auto;padding:16px}
+  .tabbar{display:flex;gap:6px;margin-bottom:14px}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+  .tab.active{background:var(--esc);color:#fff;border-color:var(--esc)}
+  .secttl{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin:4px 4px 8px}
+  .ocard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:11px}
+  .ocard.mine{border:2px solid #185FA5}
+  .ohead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .onum{font-weight:700;font-size:15px}
+  .badge{font-size:11px;padding:2px 9px;border-radius:8px;font-weight:600}
+  .badge.ofer{background:var(--amber-soft);color:var(--amber)}
+  .badge.asig{background:#E6F1FB;color:#0C447C}
+  .badge.ruta{background:var(--amber-soft);color:var(--amber)}
+  .oinfo{font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:10px}
+  .oinfo i{font-size:14px;vertical-align:-2px;margin-right:5px}
+  .bTake{width:100%;background:var(--esc);color:#fff;border:none;height:40px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
+  .bTake:hover{background:var(--esc-d)}
+  .bGo{width:100%;background:var(--orange);color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
+  .bGo:hover{background:var(--orange-d)}
+  .bDone{width:100%;background:var(--ok);color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
+  .bGhost{width:100%;margin-top:8px;background:none;border:none;color:var(--esc);font-size:13px;font-weight:600;cursor:pointer}
+  .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
+  .modal{position:fixed;inset:0;background:rgba(20,40,36,.45);display:flex;align-items:center;justify-content:center;padding:24px;z-index:20}
+  .modal .box{background:#fff;border-radius:16px;max-width:360px;width:100%;padding:22px}
+  .modal h3{margin:0 0 14px;font-size:18px}
+  .modal select{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;margin-bottom:8px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--esc-d);color:#fff;padding:11px 18px;border-radius:10px;font-size:13.5px;z-index:40;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .toast.bad{background:var(--bad)}
+</style>
+</head>
+<body>
 
--- Clave del portal en cada volquetero (default 0000)
-alter table rcd_volqueteros add column if not exists clave_portal text default '0000';
+  <div id="vLogin" class="wraplogin">
+    <div class="card">
+      <div class="top"></div>
+      <div class="pad">
+        <div class="brandbox"><div class="wordmark">RCD <b>Pro</b></div><div class="sub">Portal del volquetero</div></div>
+        <div class="field"><label>Documento (cedula o NIT)</label><input id="inDoc" inputmode="numeric" placeholder="tu numero de documento"></div>
+        <div class="field"><label>Clave</label><input id="inClave" type="password" placeholder="tu clave"></div>
+        <button class="enter" id="bEntrar" onclick="entrar()">Entrar</button>
+        <div class="err" id="loginErr"></div>
+        <div class="hint">Tu clave por defecto es 0000. Podras cambiarla dentro del portal.</div>
+      </div>
+    </div>
+  </div>
 
--- LOGIN del volquetero: documento (cedula o NIT) + clave
-drop function if exists rcd_volq_login(text,text);
-create or replace function rcd_volq_login(p_doc text, p_clave text)
-returns table(volquetero_id uuid, nombre text, documento text, gestor_id uuid, clave_default boolean)
-language sql security definer set search_path=public as $$
-  select id, nombre, documento, gestor_id, (coalesce(clave_portal,'0000')='0000')
-  from rcd_volqueteros
-  where documento = p_doc
-    and coalesce(clave_portal,'0000') = p_clave
-    and coalesce(activo,true) = true
-  limit 1;
-$$;
-grant execute on function rcd_volq_login(text,text) to anon;
+  <div id="vPanel" class="hidden">
+    <div class="appbar">
+      <div class="who"><div class="ava" id="ava">V</div><div><div class="nm" id="nmVolq">Volquetero</div><div class="rl">Portal del volquetero</div></div></div>
+      <button class="salir" onclick="salir()">Salir</button>
+    </div>
+    <div class="container">
+      <div id="keyWarn"></div>
+      <div class="tabbar">
+        <div class="tab active" id="tabOfertas" onclick="setTab('ofertas')">Ofertas</div>
+        <div class="tab" id="tabViajes" onclick="setTab('viajes')">Mis viajes</div>
+      </div>
+      <div id="paneOfertas">
+        <div class="secttl">Ofertas disponibles</div>
+        <div id="ofertas"><div class="empty">Cargando...</div></div>
+      </div>
+      <div id="paneViajes" class="hidden">
+        <div class="secttl">Mis viajes en curso</div>
+        <div id="viajes"><div class="empty">Cargando...</div></div>
+        <div class="ocard"><button class="bGhost" style="margin:0" onclick="abrirClave()">Cambiar mi clave</button></div>
+      </div>
+    </div>
+  </div>
 
--- OFERTAS disponibles (ordenes 'ofertada' del gestor del volquetero)
-drop function if exists rcd_volq_ofertas(uuid);
-create or replace function rcd_volq_ofertas(p_volquetero_id uuid)
-returns table(orden_id uuid, numero text, tamano text, tamano_id uuid, tipo text, material text, obra text, cliente text, fecha date)
-language sql security definer set search_path=public as $$
-  select o.id, o.numero,
-    (select t.nombre from rcd_volquetas t where t.id=o.tamano_id),
-    o.tamano_id,
-    s.tipo,
-    case when s.tipo='despacho' then (select pr.nombre from rcd_productos pr where pr.id=s.producto_id) else 'RCD' end,
-    (select ob.nombre from rcd_obras ob where ob.id=s.obra_id),
-    (select cl.razon_social from rcd_clientes cl where cl.id=(select ob.cliente_id from rcd_obras ob where ob.id=s.obra_id)),
-    o.fecha_programada
-  from rcd_ordenes o
-  join rcd_solicitudes s on s.id=o.solicitud_id
-  where o.estado='ofertada' and coalesce(o.anulada,false)=false
-    and o.gestor_id=(select gestor_id from rcd_volqueteros where id=p_volquetero_id)
-  order by o.creado_en;
-$$;
-grant execute on function rcd_volq_ofertas(uuid) to anon;
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast"></div>
 
--- VEHICULOS elegibles del volquetero para un tamano (para tomar una oferta)
-drop function if exists rcd_volq_vehiculos(uuid,uuid);
-create or replace function rcd_volq_vehiculos(p_volquetero_id uuid, p_tamano_id uuid)
-returns table(vehiculo_id uuid, placa text)
-language sql security definer set search_path=public as $$
-  select v.id, v.placa
-  from rcd_vehiculos v
-  where v.volquetero_id=p_volquetero_id
-    and coalesce(v.anulado,false)=false and coalesce(v.activo,true)=true
-    and v.vence_soat is not null and v.vence_soat >= current_date
-    and v.vence_tecno is not null and v.vence_tecno >= current_date
-    and (p_tamano_id is null or v.tamano_id=p_tamano_id)
-    and not exists (select 1 from rcd_ordenes o where o.vehiculo_id=v.id and o.estado='asignada')
-  order by v.placa;
-$$;
-grant execute on function rcd_volq_vehiculos(uuid,uuid) to anon;
+<script>
+  const SUPABASE_URL  = "https://ymzxjuncantobxeftfqd.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltenhqdW5jYW50b2J4ZWZ0ZnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMzM0ODUsImV4cCI6MjA5MjgwOTQ4NX0.p1K6pvZy-Agb2J-mKF2MNR5ujrTfRjmvtTyP3QiIzu8";
+  const headers = { 'Content-Type':'application/json', 'apikey':SUPABASE_ANON, 'Authorization':'Bearer '+SUPABASE_ANON };
+  const $ = id => document.getElementById(id);
+  let ses = null, tab='ofertas';
 
--- TOMAR una oferta (el volquetero se asigna con uno de sus vehiculos)
-drop function if exists rcd_volq_tomar(uuid,uuid,uuid);
-create or replace function rcd_volq_tomar(p_volquetero_id uuid, p_orden_id uuid, p_vehiculo_id uuid)
-returns text language plpgsql security definer set search_path=public as $$
-declare v_gestor uuid; v_estado text; v_ord_tam uuid; v_veh_tam uuid; v_veh_volq uuid; v_chk text;
-begin
-  if p_vehiculo_id is null then return 'VEHICULO_VACIO'; end if;
-  select gestor_id into v_gestor from rcd_volqueteros where id=p_volquetero_id;
-  -- el vehiculo debe ser del volquetero
-  select volquetero_id, tamano_id into v_veh_volq, v_veh_tam from rcd_vehiculos where id=p_vehiculo_id;
-  if v_veh_volq is distinct from p_volquetero_id then return 'VEHICULO_NO_TUYO'; end if;
-  -- la orden debe estar ofertada y ser del mismo gestor
-  select estado, tamano_id into v_estado, v_ord_tam from rcd_ordenes where id=p_orden_id and gestor_id=v_gestor;
-  if v_estado is null then return 'ORDEN_NO_EXISTE'; end if;
-  if v_estado <> 'ofertada' then return 'ORDEN_NO_DISPONIBLE'; end if;
-  -- validar elegibilidad (misma del gestor) y tamano
-  v_chk := rcd_vehiculo_elegible(v_gestor, p_vehiculo_id);
-  if v_chk <> 'OK' then return v_chk; end if;
-  if v_ord_tam is not null and v_veh_tam is distinct from v_ord_tam then return 'TAMANO_NO_COINCIDE'; end if;
-  update rcd_ordenes set vehiculo_id=p_vehiculo_id, volquetero_id=p_volquetero_id, estado='asignada'
-    where id=p_orden_id and gestor_id=v_gestor;
-  return 'OK';
-end; $$;
-grant execute on function rcd_volq_tomar(uuid,uuid,uuid) to anon;
+  async function rpc(fn, body){
+    const r = await fetch(SUPABASE_URL+'/rest/v1/rpc/'+fn, {method:'POST', headers, body:JSON.stringify(body||{})});
+    if(!r.ok) throw new Error('rpc '+fn+' '+r.status);
+    return await r.json();
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function toast(msg, bad){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(bad?' bad':''); setTimeout(()=>t.className='toast',2200); }
+  function loginErr(m){ const e=$('loginErr'); e.textContent=m; e.classList.add('show'); }
+  function fmtFecha(f){ if(!f) return ''; const p=String(f).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):f; }
+  function tipoIcon(t){ return t==='despacho'
+    ? '<i class="ti ti-arrow-down-circle" style="color:#185FA5"></i>Despacho'
+    : '<i class="ti ti-arrow-up-circle" style="color:#993C1D"></i>Recepcion'; }
 
--- MIS VIAJES (ordenes asignada/en_ruta del volquetero)
-drop function if exists rcd_volq_mis_ordenes(uuid);
-create or replace function rcd_volq_mis_ordenes(p_volquetero_id uuid)
-returns table(orden_id uuid, numero text, tamano text, placa text, tipo text, material text, obra text, cliente text, estado text, fecha date)
-language sql security definer set search_path=public as $$
-  select o.id, o.numero,
-    (select t.nombre from rcd_volquetas t where t.id=o.tamano_id),
-    (select v.placa from rcd_vehiculos v where v.id=o.vehiculo_id),
-    s.tipo,
-    case when s.tipo='despacho' then (select pr.nombre from rcd_productos pr where pr.id=s.producto_id) else 'RCD' end,
-    (select ob.nombre from rcd_obras ob where ob.id=s.obra_id),
-    (select cl.razon_social from rcd_clientes cl where cl.id=(select ob.cliente_id from rcd_obras ob where ob.id=s.obra_id)),
-    o.estado, o.fecha_programada
-  from rcd_ordenes o
-  join rcd_solicitudes s on s.id=o.solicitud_id
-  where o.volquetero_id=p_volquetero_id
-    and o.estado in ('asignada','en_ruta')
-    and coalesce(o.anulada,false)=false
-  order by o.creado_en;
-$$;
-grant execute on function rcd_volq_mis_ordenes(uuid) to anon;
+  async function entrar(){
+    const doc=$('inDoc').value.trim(), clave=$('inClave').value.trim();
+    $('loginErr').classList.remove('show');
+    if(!doc){ loginErr('Escribe tu documento.'); return; }
+    if(!clave){ loginErr('Escribe tu clave.'); return; }
+    $('bEntrar').disabled=true; $('bEntrar').textContent='Entrando...';
+    try{
+      const d = await rpc('rcd_volq_login', {p_doc:doc, p_clave:clave});
+      if(Array.isArray(d) && d.length){
+        ses = d[0]; sessionStorage.setItem('rcd_volq_ses', JSON.stringify(ses));
+        mostrarPanel();
+      } else { loginErr('Documento o clave incorrectos.'); }
+    }catch(e){ loginErr('No se pudo conectar. Revisa tu internet.'); }
+    finally{ $('bEntrar').disabled=false; $('bEntrar').textContent='Entrar'; }
+  }
 
--- EJECUTAR: marcar en_ruta / completada (validando que la orden sea del volquetero)
-drop function if exists rcd_volq_orden_estado(uuid,uuid,text);
-create or replace function rcd_volq_orden_estado(p_volquetero_id uuid, p_orden_id uuid, p_estado text)
-returns text language plpgsql security definer set search_path=public as $$
-declare v_estado text;
-begin
-  if p_estado not in ('en_ruta','completada') then return 'ESTADO_INVALIDO'; end if;
-  select estado into v_estado from rcd_ordenes where id=p_orden_id and volquetero_id=p_volquetero_id and coalesce(anulada,false)=false;
-  if v_estado is null then return 'NO_TUYA'; end if;
-  if p_estado='en_ruta' and v_estado<>'asignada' then return 'NO_APLICA'; end if;
-  if p_estado='completada' and v_estado<>'en_ruta' then return 'NO_APLICA'; end if;
-  update rcd_ordenes set estado=p_estado where id=p_orden_id and volquetero_id=p_volquetero_id;
-  return 'OK';
-end; $$;
-grant execute on function rcd_volq_orden_estado(uuid,uuid,text) to anon;
+  function salir(){ sessionStorage.removeItem('rcd_volq_ses'); ses=null; $('vPanel').classList.add('hidden'); $('vLogin').classList.remove('hidden'); $('inClave').value=''; }
 
--- CAMBIAR CLAVE
-drop function if exists rcd_volq_cambiar_clave(uuid,text,text);
-create or replace function rcd_volq_cambiar_clave(p_volquetero_id uuid, p_actual text, p_nueva text)
-returns text language plpgsql security definer set search_path=public as $$
-declare v_ok boolean;
-begin
-  if length(coalesce(p_nueva,'')) < 4 then return 'CLAVE_CORTA'; end if;
-  select true into v_ok from rcd_volqueteros where id=p_volquetero_id and coalesce(clave_portal,'0000')=p_actual limit 1;
-  if not coalesce(v_ok,false) then return 'CLAVE_ACTUAL_MAL'; end if;
-  update rcd_volqueteros set clave_portal=p_nueva where id=p_volquetero_id;
-  return 'OK';
-end; $$;
-grant execute on function rcd_volq_cambiar_clave(uuid,text,text) to anon;
+  function mostrarPanel(){
+    $('vLogin').classList.add('hidden'); $('vPanel').classList.remove('hidden');
+    $('nmVolq').textContent = ses.nombre || 'Volquetero';
+    $('ava').textContent = (ses.nombre||'V').trim().charAt(0).toUpperCase();
+    $('keyWarn').innerHTML = ses.clave_default
+      ? '<div style="background:#FFF7E8;border:1px solid #F0D9A8;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#8A5A00;margin-bottom:10px">Estas usando la clave por defecto (0000). Cambiala en "Mis viajes".</div>' : '';
+    cargarTodo();
+  }
 
--- ============================================================
--- FIN PANEL VOLQUETERO (SQL)
--- ============================================================
+  function setTab(t){
+    tab=t;
+    $('tabOfertas').classList.toggle('active', t==='ofertas');
+    $('tabViajes').classList.toggle('active', t==='viajes');
+    $('paneOfertas').classList.toggle('hidden', t!=='ofertas');
+    $('paneViajes').classList.toggle('hidden', t!=='viajes');
+  }
+
+  async function cargarTodo(){ cargarOfertas(); cargarViajes(); }
+
+  async function cargarOfertas(){
+    const box=$('ofertas'); box.innerHTML='<div class="empty">Cargando...</div>';
+    try{
+      const arr = await rpc('rcd_volq_ofertas', {p_volquetero_id:ses.volquetero_id});
+      const ofs = Array.isArray(arr)?arr:[];
+      $('tabOfertas').textContent = 'Ofertas'+(ofs.length?' ('+ofs.length+')':'');
+      if(!ofs.length){ box.innerHTML='<div class="empty">No hay ofertas disponibles ahora.</div>'; return; }
+      box.innerHTML=''; ofs.forEach(o=>box.appendChild(cardOferta(o)));
+    }catch(e){ box.innerHTML='<div class="empty">Error al cargar ofertas.</div>'; }
+  }
+
+  function cardOferta(o){
+    const d=document.createElement('div'); d.className='ocard';
+    d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span><span class="badge ofer">Ofertada</span></div>'+
+      '<div class="oinfo">'+tipoIcon(o.tipo)+' · '+esc(o.material||'')+'<br>'+
+      '<i class="ti ti-map-pin"></i>'+esc(o.obra||'')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
+      '<i class="ti ti-truck"></i>Tamano: '+esc(o.tamano||'(cualquiera)')+'</div>'+
+      '<button class="bTake">Tomar este viaje</button>';
+    d.querySelector('.bTake').onclick=()=>tomarOferta(o);
+    return d;
+  }
+
+  async function tomarOferta(o){
+    let vehs=[];
+    try{ vehs = await rpc('rcd_volq_vehiculos', {p_volquetero_id:ses.volquetero_id, p_tamano_id:o.tamano_id}); }catch(e){}
+    vehs = Array.isArray(vehs)?vehs:[];
+    if(!vehs.length){
+      openModal('<h3>Sin vehiculo disponible</h3><p style="font-size:13.5px;color:var(--muted);line-height:1.5;margin:0 0 16px">No tienes un vehiculo libre del tamano '+esc(o.tamano||'')+' (con SOAT y tecnomecanica al dia). Libera otro viaje o revisa tus documentos.</p><button class="bTake" id="mNo">Entendido</button>');
+      $('mNo').onclick=closeModal; return;
+    }
+    openModal('<h3>Tomar '+esc(o.numero||'')+'</h3>'+
+      '<p style="font-size:13px;color:var(--muted);margin:0 0 10px">Elige con cual vehiculo haras este viaje:</p>'+
+      '<select id="selVeh">'+vehs.map(v=>'<option value="'+v.vehiculo_id+'">'+esc(v.placa)+'</option>').join('')+'</select>'+
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="bTake" id="mOk" style="flex:1">Confirmar</button>'+
+      '<button class="salir" id="mNo" style="flex:0 0 auto">Cancelar</button></div>');
+    $('mNo').onclick=closeModal;
+    $('mOk').onclick=async()=>{
+      const veh=$('selVeh').value; $('mOk').disabled=true; $('mOk').textContent='Tomando...';
+      try{
+        const r = await rpc('rcd_volq_tomar', {p_volquetero_id:ses.volquetero_id, p_orden_id:o.orden_id, p_vehiculo_id:veh});
+        closeModal();
+        if(r==='OK'){ toast('Viaje tomado'); setTab('viajes'); cargarTodo(); }
+        else if(r==='ORDEN_NO_DISPONIBLE'){ toast('Otro volquetero la tomo primero.', true); cargarTodo(); }
+        else if(r==='TAMANO_NO_COINCIDE'){ toast('El vehiculo no es del tamano correcto.', true); }
+        else { toast('No se pudo tomar ('+esc(r)+').', true); }
+      }catch(e){ closeModal(); toast('Error de conexion.', true); }
+    };
+  }
+
+  async function cargarViajes(){
+    const box=$('viajes'); box.innerHTML='<div class="empty">Cargando...</div>';
+    try{
+      const arr = await rpc('rcd_volq_mis_ordenes', {p_volquetero_id:ses.volquetero_id});
+      const vs = Array.isArray(arr)?arr:[];
+      $('tabViajes').textContent = 'Mis viajes'+(vs.length?' ('+vs.length+')':'');
+      if(!vs.length){ box.innerHTML='<div class="empty">No tienes viajes en curso.</div>'; return; }
+      box.innerHTML=''; vs.forEach(o=>box.appendChild(cardViaje(o)));
+    }catch(e){ box.innerHTML='<div class="empty">Error al cargar tus viajes.</div>'; }
+  }
+
+  function cardViaje(o){
+    const d=document.createElement('div'); d.className='ocard mine';
+    const badge = o.estado==='en_ruta' ? '<span class="badge ruta">En ruta</span>' : '<span class="badge asig">Asignada</span>';
+    let btn='';
+    if(o.estado==='asignada') btn='<button class="bGo">Sali — marcar En ruta</button>';
+    else if(o.estado==='en_ruta') btn='<button class="bDone">Termine — Completar</button>';
+    d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span>'+badge+'</div>'+
+      '<div class="oinfo">'+tipoIcon(o.tipo)+' · '+esc(o.material||'')+'<br>'+
+      '<i class="ti ti-map-pin"></i>'+esc(o.obra||'')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
+      '<i class="ti ti-license"></i>Placa: '+esc(o.placa||'')+'</div>'+btn;
+    const go=d.querySelector('.bGo'); if(go) go.onclick=()=>cambiarOrden(o,'en_ruta');
+    const dn=d.querySelector('.bDone'); if(dn) dn.onclick=()=>cambiarOrden(o,'completada');
+    return d;
+  }
+
+  function cambiarOrden(o, estado){
+    const acc = estado==='en_ruta';
+    openModal('<h3>'+(acc?'Marcar En ruta':'Completar viaje')+'</h3>'+
+      '<p style="font-size:13.5px;color:var(--muted);line-height:1.5;margin:0 0 16px">'+
+      (acc?'Confirmas que saliste con el viaje '+esc(o.numero||'')+'?':'Confirmas que terminaste el viaje '+esc(o.numero||'')+'?')+'</p>'+
+      '<div style="display:flex;gap:8px"><button class="'+(acc?'bGo':'bDone')+'" id="mOk" style="flex:1">Si, confirmar</button>'+
+      '<button class="salir" id="mNo" style="flex:0 0 auto">Cancelar</button></div>');
+    $('mNo').onclick=closeModal;
+    $('mOk').onclick=async()=>{
+      $('mOk').disabled=true; $('mOk').textContent='Procesando...';
+      try{
+        const r = await rpc('rcd_volq_orden_estado', {p_volquetero_id:ses.volquetero_id, p_orden_id:o.orden_id, p_estado:estado});
+        closeModal();
+        if(r==='OK'){ toast(acc?'Viaje en ruta':'Viaje completado'); cargarTodo(); }
+        else { toast('No se pudo ('+esc(r)+').', true); cargarTodo(); }
+      }catch(e){ closeModal(); toast('Error de conexion.', true); }
+    };
+  }
+
+  function abrirClave(){
+    openModal('<h3>Cambiar mi clave</h3>'+
+      '<div class="field"><label>Clave actual</label><input id="kAct" type="password"></div>'+
+      '<div class="field"><label>Clave nueva (min. 4)</label><input id="kNue" type="password"></div>'+
+      '<div class="err" id="kErr"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="bTake" id="kOk" style="flex:1">Guardar</button>'+
+      '<button class="salir" id="kNo" style="flex:0 0 auto">Cancelar</button></div>');
+    $('kNo').onclick=closeModal;
+    $('kOk').onclick=async()=>{
+      const a=$('kAct').value.trim(), n=$('kNue').value.trim(); const e=$('kErr');
+      e.classList.remove('show');
+      if(n.length<4){ e.textContent='La clave nueva debe tener al menos 4 caracteres.'; e.classList.add('show'); return; }
+      $('kOk').disabled=true; $('kOk').textContent='Guardando...';
+      try{
+        const r = await rpc('rcd_volq_cambiar_clave', {p_volquetero_id:ses.volquetero_id, p_actual:a, p_nueva:n});
+        if(r==='OK'){ closeModal(); ses.clave_default=(n==='0000'); sessionStorage.setItem('rcd_volq_ses',JSON.stringify(ses)); $('keyWarn').innerHTML=''; toast('Clave actualizada'); }
+        else if(r==='CLAVE_ACTUAL_MAL'){ e.textContent='La clave actual no es correcta.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+        else { e.textContent='No se pudo cambiar.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+      }catch(err){ e.textContent='Error de conexion.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+    };
+  }
+
+  function openModal(html){ $('modalRoot').innerHTML='<div class="modal"><div class="box">'+html+'</div></div>'; }
+  function closeModal(){ $('modalRoot').innerHTML=''; }
+
+  document.addEventListener('keydown', e=>{ if(e.key==='Enter' && !$('vLogin').classList.contains('hidden')) entrar(); });
+  (function init(){ const s=sessionStorage.getItem('rcd_volq_ses'); if(s){ try{ ses=JSON.parse(s); mostrarPanel(); }catch(e){} } })();
+</script>
+</body>
+</html>
