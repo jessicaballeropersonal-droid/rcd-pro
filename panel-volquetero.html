@@ -1,0 +1,141 @@
+-- ============================================================
+-- RCD PRO · PANEL DEL VOLQUETERO · Login doc+clave, tomar ofertas, ejecutar
+-- Correr en Supabase SQL Editor. Clave por defecto '0000'.
+-- Reutiliza rcd_vehiculo_elegible (la misma validacion del gestor).
+-- ============================================================
+
+-- Clave del portal en cada volquetero (default 0000)
+alter table rcd_volqueteros add column if not exists clave_portal text default '0000';
+
+-- LOGIN del volquetero: documento (cedula o NIT) + clave
+drop function if exists rcd_volq_login(text,text);
+create or replace function rcd_volq_login(p_doc text, p_clave text)
+returns table(volquetero_id uuid, nombre text, documento text, gestor_id uuid, clave_default boolean)
+language sql security definer set search_path=public as $$
+  select id, nombre, documento, gestor_id, (coalesce(clave_portal,'0000')='0000')
+  from rcd_volqueteros
+  where documento = p_doc
+    and coalesce(clave_portal,'0000') = p_clave
+    and coalesce(activo,true) = true
+  limit 1;
+$$;
+grant execute on function rcd_volq_login(text,text) to anon;
+
+-- OFERTAS disponibles (ordenes 'ofertada' del gestor del volquetero)
+drop function if exists rcd_volq_ofertas(uuid);
+create or replace function rcd_volq_ofertas(p_volquetero_id uuid)
+returns table(orden_id uuid, numero text, tamano text, tamano_id uuid, tipo text, material text, obra text, cliente text, fecha date)
+language sql security definer set search_path=public as $$
+  select o.id, o.numero,
+    (select t.nombre from rcd_volquetas t where t.id=o.tamano_id),
+    o.tamano_id,
+    s.tipo,
+    case when s.tipo='despacho' then (select pr.nombre from rcd_productos pr where pr.id=s.producto_id) else 'RCD' end,
+    (select ob.nombre from rcd_obras ob where ob.id=s.obra_id),
+    (select cl.razon_social from rcd_clientes cl where cl.id=(select ob.cliente_id from rcd_obras ob where ob.id=s.obra_id)),
+    o.fecha_programada
+  from rcd_ordenes o
+  join rcd_solicitudes s on s.id=o.solicitud_id
+  where o.estado='ofertada' and coalesce(o.anulada,false)=false
+    and o.gestor_id=(select gestor_id from rcd_volqueteros where id=p_volquetero_id)
+  order by o.creado_en;
+$$;
+grant execute on function rcd_volq_ofertas(uuid) to anon;
+
+-- VEHICULOS elegibles del volquetero para un tamano (para tomar una oferta)
+drop function if exists rcd_volq_vehiculos(uuid,uuid);
+create or replace function rcd_volq_vehiculos(p_volquetero_id uuid, p_tamano_id uuid)
+returns table(vehiculo_id uuid, placa text)
+language sql security definer set search_path=public as $$
+  select v.id, v.placa
+  from rcd_vehiculos v
+  where v.volquetero_id=p_volquetero_id
+    and coalesce(v.anulado,false)=false and coalesce(v.activo,true)=true
+    and v.vence_soat is not null and v.vence_soat >= current_date
+    and v.vence_tecno is not null and v.vence_tecno >= current_date
+    and (p_tamano_id is null or v.tamano_id=p_tamano_id)
+    and not exists (select 1 from rcd_ordenes o where o.vehiculo_id=v.id and o.estado='asignada')
+  order by v.placa;
+$$;
+grant execute on function rcd_volq_vehiculos(uuid,uuid) to anon;
+
+-- TOMAR una oferta (el volquetero se asigna con uno de sus vehiculos)
+drop function if exists rcd_volq_tomar(uuid,uuid,uuid);
+create or replace function rcd_volq_tomar(p_volquetero_id uuid, p_orden_id uuid, p_vehiculo_id uuid)
+returns text language plpgsql security definer set search_path=public as $$
+declare v_gestor uuid; v_estado text; v_ord_tam uuid; v_veh_tam uuid; v_veh_volq uuid; v_chk text;
+begin
+  if p_vehiculo_id is null then return 'VEHICULO_VACIO'; end if;
+  select gestor_id into v_gestor from rcd_volqueteros where id=p_volquetero_id;
+  -- el vehiculo debe ser del volquetero
+  select volquetero_id, tamano_id into v_veh_volq, v_veh_tam from rcd_vehiculos where id=p_vehiculo_id;
+  if v_veh_volq is distinct from p_volquetero_id then return 'VEHICULO_NO_TUYO'; end if;
+  -- la orden debe estar ofertada y ser del mismo gestor
+  select estado, tamano_id into v_estado, v_ord_tam from rcd_ordenes where id=p_orden_id and gestor_id=v_gestor;
+  if v_estado is null then return 'ORDEN_NO_EXISTE'; end if;
+  if v_estado <> 'ofertada' then return 'ORDEN_NO_DISPONIBLE'; end if;
+  -- validar elegibilidad (misma del gestor) y tamano
+  v_chk := rcd_vehiculo_elegible(v_gestor, p_vehiculo_id);
+  if v_chk <> 'OK' then return v_chk; end if;
+  if v_ord_tam is not null and v_veh_tam is distinct from v_ord_tam then return 'TAMANO_NO_COINCIDE'; end if;
+  update rcd_ordenes set vehiculo_id=p_vehiculo_id, volquetero_id=p_volquetero_id, estado='asignada'
+    where id=p_orden_id and gestor_id=v_gestor;
+  return 'OK';
+end; $$;
+grant execute on function rcd_volq_tomar(uuid,uuid,uuid) to anon;
+
+-- MIS VIAJES (ordenes asignada/en_ruta del volquetero)
+drop function if exists rcd_volq_mis_ordenes(uuid);
+create or replace function rcd_volq_mis_ordenes(p_volquetero_id uuid)
+returns table(orden_id uuid, numero text, tamano text, placa text, tipo text, material text, obra text, cliente text, estado text, fecha date)
+language sql security definer set search_path=public as $$
+  select o.id, o.numero,
+    (select t.nombre from rcd_volquetas t where t.id=o.tamano_id),
+    (select v.placa from rcd_vehiculos v where v.id=o.vehiculo_id),
+    s.tipo,
+    case when s.tipo='despacho' then (select pr.nombre from rcd_productos pr where pr.id=s.producto_id) else 'RCD' end,
+    (select ob.nombre from rcd_obras ob where ob.id=s.obra_id),
+    (select cl.razon_social from rcd_clientes cl where cl.id=(select ob.cliente_id from rcd_obras ob where ob.id=s.obra_id)),
+    o.estado, o.fecha_programada
+  from rcd_ordenes o
+  join rcd_solicitudes s on s.id=o.solicitud_id
+  where o.volquetero_id=p_volquetero_id
+    and o.estado in ('asignada','en_ruta')
+    and coalesce(o.anulada,false)=false
+  order by o.creado_en;
+$$;
+grant execute on function rcd_volq_mis_ordenes(uuid) to anon;
+
+-- EJECUTAR: marcar en_ruta / completada (validando que la orden sea del volquetero)
+drop function if exists rcd_volq_orden_estado(uuid,uuid,text);
+create or replace function rcd_volq_orden_estado(p_volquetero_id uuid, p_orden_id uuid, p_estado text)
+returns text language plpgsql security definer set search_path=public as $$
+declare v_estado text;
+begin
+  if p_estado not in ('en_ruta','completada') then return 'ESTADO_INVALIDO'; end if;
+  select estado into v_estado from rcd_ordenes where id=p_orden_id and volquetero_id=p_volquetero_id and coalesce(anulada,false)=false;
+  if v_estado is null then return 'NO_TUYA'; end if;
+  if p_estado='en_ruta' and v_estado<>'asignada' then return 'NO_APLICA'; end if;
+  if p_estado='completada' and v_estado<>'en_ruta' then return 'NO_APLICA'; end if;
+  update rcd_ordenes set estado=p_estado where id=p_orden_id and volquetero_id=p_volquetero_id;
+  return 'OK';
+end; $$;
+grant execute on function rcd_volq_orden_estado(uuid,uuid,text) to anon;
+
+-- CAMBIAR CLAVE
+drop function if exists rcd_volq_cambiar_clave(uuid,text,text);
+create or replace function rcd_volq_cambiar_clave(p_volquetero_id uuid, p_actual text, p_nueva text)
+returns text language plpgsql security definer set search_path=public as $$
+declare v_ok boolean;
+begin
+  if length(coalesce(p_nueva,'')) < 4 then return 'CLAVE_CORTA'; end if;
+  select true into v_ok from rcd_volqueteros where id=p_volquetero_id and coalesce(clave_portal,'0000')=p_actual limit 1;
+  if not coalesce(v_ok,false) then return 'CLAVE_ACTUAL_MAL'; end if;
+  update rcd_volqueteros set clave_portal=p_nueva where id=p_volquetero_id;
+  return 'OK';
+end; $$;
+grant execute on function rcd_volq_cambiar_clave(uuid,text,text) to anon;
+
+-- ============================================================
+-- FIN PANEL VOLQUETERO (SQL)
+-- ============================================================
