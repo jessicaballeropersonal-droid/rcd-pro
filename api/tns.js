@@ -203,6 +203,43 @@ module.exports = async (req, res) => {
         numero: d.numero||'', valorTotal: d.valorTotal||'', fechaAsentado: d.fechaAsentado||''}); return;
     }
 
+    // ---- Traer cartera de varios clientes (ObtenerCartera) ----
+    if(accion === 'traer_cartera'){
+      const lg = await tnsLogin(gestor_id, key);
+      if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      const suc = encodeURIComponent(body.codigosucursal || '');
+      const clientes = Array.isArray(body.clientes) ? body.clientes : [];
+      if(!clientes.length){ res.status(200).json({ok:true, cartera: []}); return; }
+
+      async function unCliente(c){
+        const cod = encodeURIComponent(c.cod_tercero || '');
+        try{
+          const r = await fetch(lg.url+'/v2/tablas/Tercero/ObtenerCartera?codigosucursal='+suc+'&codcliente='+cod, {
+            method:'GET', headers:{'Authorization':'Bearer '+lg.token} });
+          const t = await r.text(); let j=null; try{ j=JSON.parse(t); }catch{ j=null; }
+          if(!(r.ok && j && j.status === true)) return { cliente_id:c.cliente_id, cod_tercero:c.cod_tercero, ok:false };
+          const arr = Array.isArray(j.data) ? j.data : [];
+          let saldo=0, anticipo=0;
+          const facturas = arr.map(x=>{
+            const s = parseFloat(x.saldo)||0, a = parseFloat(x.anticipo)||0;
+            saldo += s; anticipo += a;
+            return { numero:x.numero, fecha:x.fecha, fechaVence:x.fechaVence, diasVencimiento:x.diasVencimiento,
+                     valor:parseFloat(x.valor)||0, pagado:parseFloat(x.pagado)||0, saldo:s,
+                     anticipo:a, abonoAnticipo:parseFloat(x.abonoAnticipo)||0 };
+          });
+          return { cliente_id:c.cliente_id, cod_tercero:c.cod_tercero, ok:true, saldo, anticipo, facturas };
+        }catch(e){ return { cliente_id:c.cliente_id, cod_tercero:c.cod_tercero, ok:false }; }
+      }
+
+      const cartera=[]; const LOTE=6;
+      for(let i=0;i<clientes.length;i+=LOTE){
+        const lote = clientes.slice(i, i+LOTE);
+        const res2 = await Promise.all(lote.map(unCliente));
+        res2.forEach(x=>cartera.push(x));
+      }
+      res.status(200).json({ok:true, cartera}); return;
+    }
+
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
   } catch(e){
     res.status(200).json({ok:false, error: 'ERR:'+((e && e.message) || String(e)) });
