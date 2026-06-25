@@ -396,8 +396,9 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       '<div class="note">Los materiales/productos ahora se sincronizan en <b>Parametros → Productos terminados</b>, donde cada uno muestra su estado TNS (verde si esta vinculado). Aqui ya no se gestionan.</div></div>'+
       '<div class="mcard"><h3 style="margin:0 0 4px">Clientes → tercero en TNS</h3>'+
       '<div class="note">Trae tus clientes de TNS (con su codigo, NIT y ciudad). Se emparejan por NIT con los de RCD Pro: si existe se actualiza, si no se crea.</div>'+
-      (pCrear?'<div style="margin-top:8px"><button class="btn ghost sm" id="bTraerCli">Traer clientes de TNS</button></div>':'')+
-      '<div id="cliRes" class="note" style="display:none;margin-top:10px"></div></div>';
+      (pCrear?'<div style="margin-top:8px"><button class="btn ghost sm" id="bTraerCli">Traer clientes de TNS</button> <button class="btn ghost sm" id="bDiag">Ver campos (diagnostico)</button></div>':'')+
+      '<div id="cliRes" class="note" style="display:none;margin-top:10px"></div>'+
+      '<div id="diagRes" style="display:none;margin-top:10px"></div></div>';
 
     const tc=bd.querySelector('#bTraerCli'); if(tc) tc.onclick=async function(){
       const btn=this, box=bd.querySelector('#cliRes'); btn.disabled=true; btn.textContent='Trayendo...';
@@ -419,6 +420,22 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
         else ctx.toast('No se pudieron importar.','error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Traer clientes de TNS';
+    };
+
+    const bd2=bd.querySelector('#bDiag'); if(bd2) bd2.onclick=async function(){
+      const box=bd.querySelector('#diagRes'); this.disabled=true; this.textContent='Consultando...';
+      try{
+        const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({accion:'diag_tercero',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,filtro:''})}).then(x=>x.json());
+        if(r&&r.ok){
+          box.style.display='block';
+          box.innerHTML='<div class="mcard" style="max-width:none"><b>Campos que trae cada tercero ('+r.total+' en total):</b>'+
+            '<div class="mono" style="font-size:11px;margin-top:6px;word-break:break-word">'+esc((r.campos||[]).join(', '))+'</div>'+
+            '<b style="display:block;margin-top:10px">Primer tercero (datos crudos):</b>'+
+            '<pre class="mono" style="font-size:10.5px;white-space:pre-wrap;word-break:break-word;background:#F7FAF9;padding:8px;border-radius:6px;margin-top:4px">'+esc(JSON.stringify(r.muestra,null,2))+'</pre></div>';
+        } else { box.style.display='block'; box.innerHTML='<div class="note warn">TNS: '+esc((r&&r.error)||'error')+'</div>'; }
+      }catch(e){ box.style.display='block'; box.innerHTML='<div class="note warn">Error de conexion.</div>'; }
+      this.disabled=false; this.textContent='Ver campos (diagnostico)';
     };
   }
 
