@@ -7,7 +7,7 @@ window.RCD_MODULOS = window.RCD_MODULOS || {};
 
 window.RCD_MODULOS.liquidacion = function(el, ctx){
   const pCrear = ctx.can('liquidacion','escribir');
-  function money(n){ return '$ '+numEs(Math.round(+n||0)); }
+  function money(n){ return '$ '+Math.round(+n||0).toLocaleString('es-CO'); }
   let side='cob';
 
   // estado lados
@@ -120,7 +120,7 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
   }
   async function cobGuardar(){
     const btn=el.querySelector('#c_save'); btn.disabled=true; btn.textContent='Guardando...';
-    const lineas=cob.lineas.map(l=>({seccion:l.seccion,descripcion:l.descripcion,cantidad:+l.cantidad||0,unidad:l.unidad,precio_unit:+l.precio_unit||0,total:+l.total||0,aplica_iva:!!l.aplica_iva}));
+    const lineas=cob.lineas.map(l=>({seccion:l.seccion,descripcion:l.descripcion,cantidad:+l.cantidad||0,unidad:l.unidad,precio_unit:+l.precio_unit||0,total:+l.total||0,aplica_iva:!!l.aplica_iva,producto_id:l.producto_id||null,tipo_articulo:l.tipo_articulo||null}));
     try{ const r=scalar(await ctx.rpc('rcd_liquidacion_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_obra_id:cob.obra_id,p_desde:cob.desde,p_hasta:cob.hasta,p_es_final:cob.es_final,p_lineas:lineas}));
       if(r==='SIN_PERMISO'){ ctx.toast('No tienes permiso.','error'); }
       else if(r==='FALTAN_DATOS'){ ctx.toast('Faltan datos.','error'); }
