@@ -668,7 +668,7 @@ async function municipios(body, ctx){
 
     cont.querySelector('#bBackT').onclick=()=>comunas(m);
     cont.querySelectorAll('tr[data-vq]').forEach(tr=>{
-      const recalc=()=>{ const co=parseNum(tr.querySelector('.t_cobro').value), pa=parseNum(tr.querySelector('.t_pago').value); tr.querySelector('.t_margen').textContent=numEs(co-pa); };
+      const recalc=()=>{ const co=parseNum(tr.querySelector('.t_cobro').value), pa=parseNum(tr.querySelector('.t_pago').value); tr.querySelector('.t_margen').textContent=Math.round(co-pa).toLocaleString('es-CO'); };
       tr.querySelector('.t_cobro').addEventListener('input',recalc);
       tr.querySelector('.t_pago').addEventListener('input',recalc);
     });
