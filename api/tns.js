@@ -259,6 +259,40 @@ module.exports = async (req, res) => {
       res.status(200).json({ok:true, total: arr.length, campos: Object.keys(primero), muestra: primero}); return;
     }
 
+    // ---- Traer movimientos de un cliente (ObtenerMovimientos) ----
+    if(accion === 'traer_movimientos'){
+      const lg = await tnsLogin(gestor_id, key);
+      if(lg.error){ res.status(200).json({ok:false, error: lg.error}); return; }
+      const suc = encodeURIComponent(body.codigosucursal || '');
+      const cod = encodeURIComponent(body.codcliente || '');
+      if(!cod){ res.status(200).json({ok:false, error:'SIN_CLIENTE'}); return; }
+      let r2, j2=null;
+      try{
+        r2 = await fetch(lg.url+'/v2/tablas/Tercero/ObtenerMovimientos?codigosucursal='+suc+'&codcliente='+cod, {
+          method:'GET', headers:{'Authorization':'Bearer '+lg.token} });
+        const t2 = await r2.text(); try{ j2 = JSON.parse(t2); }catch{ j2 = null; }
+      }catch(e){ res.status(200).json({ok:false, error:'NO_CONECTA_TNS'}); return; }
+      if(!(r2.ok && j2 && j2.status === true && j2.data)){
+        res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')) }); return;
+      }
+      const d = j2.data;
+      function pf(f){ const m=String(f||'').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m?(m[3]+m[2]+m[1]):''; }
+      const movs=[];
+      (d.documentos||[]).forEach(x=>movs.push({fecha:x.fecha, orden:pf(x.fecha), tipo:'factura', etiqueta:'Factura',
+        num:((x.codigoPrefijo||'')+(x.numero||'')), debito:parseFloat(x.valor)||0, credito:0, desc:''}));
+      (d.abonos||[]).forEach(x=>movs.push({fecha:x.fecha, orden:pf(x.fecha), tipo:'pago', etiqueta:'Pago',
+        num:((x.codigoPrefijoRecibo||x.prefijoAbono||'')+(x.numeroRecibo||x.numero||'')), debito:0, credito:parseFloat(x.valor)||0, desc:x.descripcion||''}));
+      (d.otros||[]).forEach(x=>movs.push({fecha:x.fecha, orden:pf(x.fecha), tipo:'otro', etiqueta:'Nota/Otro',
+        num:((x.codigoPrefijo||'')+(x.numero||'')), debito:0, credito:parseFloat(x.valor)||0, desc:x.descripcion||''}));
+      (d.anticipos||[]).forEach(x=>movs.push({fecha:x.fechaAnticipo, orden:pf(x.fechaAnticipo), tipo:'anticipo', etiqueta:'Anticipo',
+        num:((x.prefijoAnticipo||'')+(x.numeroAnticipo||'')), debito:0, credito:parseFloat(x.anticipo)||0, desc:x.descripcionAnticipo||''}));
+      movs.sort((a,b)=> a.orden<b.orden?-1:(a.orden>b.orden?1:0));
+      let saldo=0; movs.forEach(m=>{ saldo += m.debito - m.credito; m.saldo=saldo; });
+      const facturado=movs.reduce((a,m)=>a+m.debito,0);
+      const pagado=movs.reduce((a,m)=>a+m.credito,0);
+      res.status(200).json({ok:true, movimientos:movs, facturado, pagado, saldo}); return;
+    }
+
     res.status(200).json({ok:false, error:'ACCION_DESCONOCIDA'});
   } catch(e){
     res.status(200).json({ok:false, error: 'ERR:'+((e && e.message) || String(e)) });
