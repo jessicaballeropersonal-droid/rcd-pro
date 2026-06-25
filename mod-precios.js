@@ -9,7 +9,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
   const pCrear=ctx.can('parametros','escribir'), pEliminar=ctx.can('parametros','eliminar');
   let MUNIS=[], VOLQS=[], ALIADOS=[], PRODUCTOS=[];
 
-  function money(n){ return numEs(n)+''; }
+  function money(n){ return Math.round(+n||0).toLocaleString('es-CO'); }
   function tabbar(activa){
     return '<div class="tabbar">'+
       '<button class="tab'+(activa==='it'?' active':'')+'" data-t="it">Items (precio global)</button>'+
