@@ -19,13 +19,87 @@ window.RCD_MODULOS.facturacion = function(el, ctx){
       '<h2 style="font-size:20px;font-weight:800;margin:0 0 2px">Facturacion</h2>'+
       '<p class="lead" style="margin:0 0 14px">Anticipos y saldos por obra. La emision en TNS se activa en la siguiente fase.</p>'+
       '<div class="tabbar" id="fbar"></div><div id="fbody"></div></div>';
-    const tabs=[['ant','Anticipos / Saldos'],['fact','Por facturar'],['emi','Emitidas'],['sync','Sincronizacion TNS'],['cfg','Configuracion']];
+    const tabs=[['ant','Anticipos / Saldos'],['cartera','Cartera'],['fact','Por facturar'],['emi','Emitidas'],['sync','Sincronizacion TNS'],['cfg','Configuracion']];
     const bar=el.querySelector('#fbar');
     bar.innerHTML=tabs.map(t=>'<button class="tab'+(t[0]===tab?' active':'')+'" data-k="'+t[0]+'">'+t[1]+'</button>').join('');
     bar.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ tab=b.dataset.k; shell(); });
-    if(tab==='ant') antView(); else if(tab==='fact') factView(); else if(tab==='emi') emiView(); else if(tab==='sync') syncView(); else cfgView();
+    if(tab==='ant') antView(); else if(tab==='cartera') carteraView(); else if(tab==='fact') factView(); else if(tab==='emi') emiView(); else if(tab==='sync') syncView(); else cfgView();
   }
   function body(){ return el.querySelector('#fbody'); }
+
+  // ===================== CARTERA (solo lectura desde TNS) =====================
+  let carteraData=null, carteraFiltro='';
+  async function carteraView(){
+    const bd=body();
+    bd.innerHTML=
+      '<div class="mcard"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<h3 style="margin:0">Cartera (desde TNS)</h3>'+
+      '<span id="semaforo" class="badge warn">Sincronizando...</span></div>'+
+      '<div class="note" style="margin-top:6px">Saldos reales de TNS. Se actualiza solo al abrir esta pestaña.</div>'+
+      '<input id="cartBuscar" placeholder="Buscar cliente por nombre o NIT..." style="width:100%;margin-top:10px" value="'+esc(carteraFiltro)+'">'+
+      '<div id="cartResumen" style="margin-top:10px"></div>'+
+      '<div id="cartTabla" style="margin-top:6px"><div class="loading">Consultando TNS...</div></div></div>';
+
+    const buscar=bd.querySelector('#cartBuscar');
+    buscar.oninput=()=>{ carteraFiltro=buscar.value.trim().toLowerCase(); pintarCartera(); };
+
+    // sincroniza sola al abrir
+    let cfg={}; try{ cfg=row1(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{}; }catch(e){}
+    if(!cfg.tiene_credenciales){ setSemaforo('off','TNS sin conectar'); bd.querySelector('#cartTabla').innerHTML='<div class="note warn">Conecta TNS en Configuracion para ver la cartera.</div>'; return; }
+
+    let clientes=[]; try{ const r=await ctx.rpc('rcd_tns_clientes_con_tns',{p_gestor_id:ctx.ses.gestor_id}); clientes=Array.isArray(r)?r:[]; }catch(e){}
+    if(!clientes.length){ setSemaforo('warn','Sin clientes TNS'); bd.querySelector('#cartTabla').innerHTML='<div class="empty">No hay clientes emparejados con TNS todavia. Traelos en Sincronizacion TNS.</div>'; return; }
+
+    try{
+      const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accion:'traer_cartera',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00',
+          clientes:clientes.map(c=>({cliente_id:c.cliente_id,cod_tercero:c.cod_tercero}))})}).then(x=>x.json());
+      if(!(r&&r.ok)){ setSemaforo('off','Error TNS'); bd.querySelector('#cartTabla').innerHTML='<div class="note warn">TNS no respondio: '+esc((r&&r.error)||'error')+'</div>'; return; }
+      // unir nombres
+      const byId={}; clientes.forEach(c=>byId[c.cliente_id]={razon_social:c.razon_social,nit:c.nit});
+      carteraData=(r.cartera||[]).map(x=>({...x, razon_social:(byId[x.cliente_id]||{}).razon_social||'(cliente)', nit:(byId[x.cliente_id]||{}).nit||''}));
+      const fallidos=carteraData.filter(x=>!x.ok).length;
+      const hora=new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      if(fallidos===0) setSemaforo('ok','Sincronizado · '+hora);
+      else setSemaforo('warn', fallidos+' sin responder · '+hora);
+      pintarCartera();
+    }catch(e){ setSemaforo('off','Sin conexion'); bd.querySelector('#cartTabla').innerHTML='<div class="note warn">Error de conexion.</div>'; }
+  }
+
+  function setSemaforo(tipo,txt){ const s=el.querySelector('#semaforo'); if(!s) return; s.className='badge '+(tipo==='ok'?'ok':(tipo==='off'?'danger':'warn')); s.textContent=txt; }
+
+  function pintarCartera(){
+    const cont=el.querySelector('#cartTabla'), res=el.querySelector('#cartResumen'); if(!cont||!carteraData) return;
+    let lista=carteraData.filter(x=>x.ok);
+    if(carteraFiltro) lista=lista.filter(x=>((x.razon_social||'').toLowerCase().indexOf(carteraFiltro)>=0)||((x.nit||'').toLowerCase().indexOf(carteraFiltro)>=0));
+    const totSaldo=lista.reduce((a,x)=>a+(+x.saldo||0),0);
+    const totAnt=lista.reduce((a,x)=>a+(+x.anticipo||0),0);
+    res.innerHTML='<div class="row2"><div class="field" style="margin:0"><label>Cartera total</label><div class="mono" style="font-size:18px;font-weight:800;color:#A02114">'+money(totSaldo)+'</div></div>'+
+      '<div class="field" style="margin:0"><label>Anticipos</label><div class="mono" style="font-size:18px;font-weight:800;color:#0B6B4F">'+money(totAnt)+'</div></div></div>';
+    if(!lista.length){ cont.innerHTML='<div class="empty">Sin resultados.</div>'; return; }
+    cont.innerHTML='<table class="mtable"><tr><th>Cliente</th><th style="text-align:right">Saldo TNS</th><th style="text-align:right">Anticipos</th><th></th></tr>'+
+      lista.map((x,i)=>'<tr class="cartrow" data-i="'+i+'" style="cursor:pointer"><td><b>'+esc(x.razon_social)+'</b><br><span style="font-size:11px;color:var(--muted)" class="mono">'+esc(x.nit||'')+'</span></td>'+
+        '<td style="text-align:right" class="mono" style="color:'+((+x.saldo)>0?'#A02114':'#0B6B4F')+'">'+money(x.saldo)+'</td>'+
+        '<td style="text-align:right" class="mono">'+money(x.anticipo)+'</td>'+
+        '<td><i class="ti ti-chevron-down" style="color:#aaa"></i></td></tr>'+
+        '<tr class="cartdet" data-d="'+i+'" style="display:none"><td colspan="4" style="background:#F7FAF9;padding:0"></td></tr>').join('')+'</table>';
+    lista.forEach((x,i)=>{ const row=cont.querySelector('.cartrow[data-i="'+i+'"]'); if(row) row.onclick=()=>toggleDet(i,x); });
+  }
+
+  function toggleDet(i,x){
+    const det=el.querySelector('.cartdet[data-d="'+i+'"]'); if(!det) return;
+    if(det.style.display!=='none'){ det.style.display='none'; return; }
+    el.querySelectorAll('.cartdet').forEach(d=>d.style.display='none');
+    const fs=x.facturas||[];
+    det.querySelector('td').innerHTML = fs.length?
+      '<table class="mtable" style="margin:0"><tr><th>Factura</th><th>Vence</th><th style="text-align:right">Dias</th><th style="text-align:right">Valor</th><th style="text-align:right">Saldo</th></tr>'+
+      fs.map(f=>'<tr><td class="mono">'+esc(f.numero||'')+'</td><td class="mono">'+esc(f.fechaVence||'')+'</td>'+
+        '<td style="text-align:right" class="mono">'+esc(String(f.diasVencimiento||''))+'</td>'+
+        '<td style="text-align:right" class="mono">'+money(f.valor)+'</td>'+
+        '<td style="text-align:right" class="mono" style="color:'+((+f.saldo)>0?'#A02114':'#0B6B4F')+'">'+money(f.saldo)+'</td></tr>').join('')+'</table>'
+      : '<div class="empty" style="margin:0">Sin facturas pendientes.</div>';
+    det.style.display='';
+  }
 
   // ===================== ANTICIPOS / SALDOS =====================
   async function antView(){
