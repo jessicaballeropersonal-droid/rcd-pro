@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCD Pro · Portal de cliente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#E7E7E3;--surface:#FFFFFF;--ink:#1A2B27;--muted:#6E7A77;--line:#D9E2DF;
+    --esc:#0F766E;--esc-soft:#E2F3F0;--esc-d:#0B4A45;--orange:#E8620A;--bad:#B91C1C;--ok:#0B6B4F;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(1100px 500px at 50% -10%, #DCEAE7 0%, transparent 60%),var(--bg);
+    color:var(--ink);font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'JetBrains Mono',monospace}
+  .wraplogin{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px rgba(15,118,110,.12);overflow:hidden}
+  .top{background:var(--esc);height:7px}
+  .pad{padding:28px 28px 24px}
+  .brandbox{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:8px}
+  .wordmark{font-weight:900;font-size:34px;letter-spacing:-.02em;color:var(--esc-d);line-height:1}
+  .wordmark b{color:var(--orange)}
+  .sub{font-size:12px;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+  .field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;-webkit-appearance:none}
+  .field input:focus{outline:2px solid var(--esc);border-color:var(--esc)}
+  .enter{width:100%;background:var(--esc);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow';font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+  .enter:hover{background:var(--esc-d)}
+  .enter:disabled{opacity:.6;cursor:default}
+  .hint{margin-top:18px;background:var(--esc-soft);border:1px solid #C4E3DD;border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--esc-d);font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.5}
+  .err{margin-top:14px;background:#FBEAEA;border:1px solid #E7C2C2;border-radius:9px;padding:10px 12px;font-size:12.5px;color:var(--bad);text-align:center;display:none}
+  .err.show{display:block}
+  .hidden{display:none}
+  .appbar{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+  .who{display:flex;align-items:center;gap:10px}
+  .ava{width:36px;height:36px;border-radius:9px;background:var(--esc-soft);color:var(--esc-d);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+  .who .nm{font-weight:700;font-size:14px;line-height:1.15}
+  .who .rl{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+  .salir{background:none;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-family:'Barlow';font-size:13px;color:var(--ink);cursor:pointer}
+  .container{max-width:560px;margin:0 auto;padding:16px}
+  .secttl{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin:18px 4px 8px}
+  .qcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .qcard.pend{border:2px solid var(--esc)}
+  .qhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+  .qnum{font-weight:700;font-size:15px}
+  .badge{font-size:11px;padding:2px 9px;border-radius:8px;font-weight:600}
+  .badge.pend{background:var(--esc-soft);color:var(--esc-d)}
+  .badge.ok{background:#E3F4ED;color:var(--ok)}
+  .badge.bad{background:#FBEAEA;color:var(--bad)}
+  .qobra{font-size:12.5px;color:var(--muted);margin-bottom:10px}
+  table.det{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}
+  table.det th{font-weight:500;color:var(--muted);text-align:left;padding:4px 0;font-size:12px}
+  table.det td{padding:5px 0;border-top:1px solid var(--line)}
+  .r{text-align:right}
+  .tot{display:flex;justify-content:space-between;font-size:13px;padding:2px 0}
+  .tot.grand{font-weight:800;font-size:15px;border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
+  .acts{display:flex;gap:8px;margin-top:12px}
+  .bAcc{flex:1;background:var(--esc);color:#fff;border:none;border-radius:10px;padding:11px;font-family:'Barlow';font-size:14px;font-weight:700;cursor:pointer}
+  .bAcc:hover{background:var(--esc-d)}
+  .bAcc:disabled{opacity:.6}
+  .bRej{flex:0 0 auto;padding:11px 16px;background:#fff;border:1px solid var(--line);border-radius:10px;font-family:'Barlow';font-size:14px;color:var(--ink);cursor:pointer}
+  .bGhost{width:100%;margin-top:8px;background:none;border:none;color:var(--esc);font-size:13px;font-weight:600;cursor:pointer}
+  .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
+  .warnkey{background:#FFF7E8;border:1px solid #F0D9A8;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#8A5A00;margin-bottom:6px}
+  .modal{position:fixed;inset:0;background:rgba(20,40,36,.45);display:flex;align-items:center;justify-content:center;padding:24px;z-index:20}
+  .modal .box{background:#fff;border-radius:16px;max-width:360px;width:100%;padding:22px}
+  .modal h3{margin:0 0 14px;font-size:18px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--esc-d);color:#fff;padding:11px 18px;border-radius:10px;font-size:13.5px;z-index:40;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .toast.bad{background:var(--bad)}
+</style>
+</head>
+<body>
+
+  <div id="vLogin" class="wraplogin">
+    <div class="card">
+      <div class="top"></div>
+      <div class="pad">
+        <div class="brandbox"><div class="wordmark">RCD <b>Pro</b></div><div class="sub">Portal de cliente</div></div>
+        <div class="field"><label>NIT</label><input id="inNit" inputmode="numeric" placeholder="tu NIT (sin digito de verificacion)"></div>
+        <div class="field"><label>Clave</label><input id="inClave" type="password" placeholder="tu clave"></div>
+        <button class="enter" id="bEntrar" onclick="entrar()">Entrar</button>
+        <div class="err" id="loginErr"></div>
+        <div class="hint">Tu clave por defecto es 0000. Podras cambiarla dentro del portal.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="vPanel" class="hidden">
+    <div class="appbar">
+      <div class="who"><div class="ava" id="ava">C</div><div><div class="nm" id="nmCli">Cliente</div><div class="rl">Portal de cliente</div></div></div>
+      <button class="salir" onclick="salir()">Salir</button>
+    </div>
+    <div class="container">
+      <div id="keyWarn"></div>
+      <div class="secttl">Por aceptar</div>
+      <div id="pend"><div class="empty">Cargando...</div></div>
+      <div class="secttl">Historial</div>
+      <div id="hist"></div>
+      <div class="secttl">Mi cuenta</div>
+      <div class="qcard"><button class="bGhost" style="margin:0" onclick="abrirClave()">Cambiar mi clave</button></div>
+    </div>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast"></div>
+
+<script>
+  const SUPABASE_URL  = "https://ymzxjuncantobxeftfqd.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltenhqdW5jYW50b2J4ZWZ0ZnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMzM0ODUsImV4cCI6MjA5MjgwOTQ4NX0.p1K6pvZy-Agb2J-mKF2MNR5ujrTfRjmvtTyP3QiIzu8";
+  const headers = { 'Content-Type':'application/json', 'apikey':SUPABASE_ANON, 'Authorization':'Bearer '+SUPABASE_ANON };
+  const $ = id => document.getElementById(id);
+  let ses = null;
+
+  async function rpc(fn, body){
+    const r = await fetch(SUPABASE_URL+'/rest/v1/rpc/'+fn, {method:'POST', headers, body:JSON.stringify(body||{})});
+    if(!r.ok) throw new Error('rpc '+fn+' '+r.status);
+    return await r.json();
+  }
+  function money(n){ return '$ '+Math.round(+n||0).toLocaleString('es-CO'); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function toast(msg, bad){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(bad?' bad':''); setTimeout(()=>t.className='toast',2200); }
+  function loginErr(m){ const e=$('loginErr'); e.textContent=m; e.classList.add('show'); }
+
+  async function entrar(){
+    const nit=$('inNit').value.trim(), clave=$('inClave').value.trim();
+    $('loginErr').classList.remove('show');
+    if(!nit){ loginErr('Escribe tu NIT.'); return; }
+    if(!clave){ loginErr('Escribe tu clave.'); return; }
+    $('bEntrar').disabled=true; $('bEntrar').textContent='Entrando...';
+    try{
+      const d = await rpc('rcd_cliente_login', {p_nit:nit, p_clave:clave});
+      if(Array.isArray(d) && d.length){
+        ses = d[0]; sessionStorage.setItem('rcd_cli_ses', JSON.stringify(ses));
+        mostrarPanel();
+      } else { loginErr('NIT o clave incorrectos.'); }
+    }catch(e){ loginErr('No se pudo conectar. Revisa tu internet.'); }
+    finally{ $('bEntrar').disabled=false; $('bEntrar').textContent='Entrar'; }
+  }
+
+  function salir(){ sessionStorage.removeItem('rcd_cli_ses'); ses=null; $('vPanel').classList.add('hidden'); $('vLogin').classList.remove('hidden'); $('inClave').value=''; }
+
+  function mostrarPanel(){
+    $('vLogin').classList.add('hidden'); $('vPanel').classList.remove('hidden');
+    $('nmCli').textContent = ses.razon_social || 'Cliente';
+    $('ava').textContent = (ses.razon_social||'C').trim().charAt(0).toUpperCase();
+    $('keyWarn').innerHTML = ses.clave_default
+      ? '<div class="warnkey">Estas usando la clave por defecto (0000). Cambiala en "Mi cuenta".</div>' : '';
+    cargarCotizaciones();
+  }
+
+  async function cargarCotizaciones(){
+    const pend=$('pend'), hist=$('hist');
+    pend.innerHTML='<div class="empty">Cargando...</div>'; hist.innerHTML='';
+    try{
+      const cots = await rpc('rcd_cliente_cotizaciones', {p_cliente_id:ses.cliente_id});
+      const arr = Array.isArray(cots)?cots:[];
+      const pendientes = arr.filter(c=>c.estado==='borrador');
+      const otras = arr.filter(c=>c.estado!=='borrador');
+      if(!pendientes.length){ pend.innerHTML='<div class="empty">No tienes cotizaciones por aceptar.</div>'; }
+      else { pend.innerHTML=''; pendientes.forEach(c=>pend.appendChild(cardPend(c))); }
+      if(!otras.length){ hist.innerHTML='<div class="empty">Sin historial todavia.</div>'; }
+      else { hist.innerHTML=''; otras.forEach(c=>hist.appendChild(cardHist(c))); }
+    }catch(e){ pend.innerHTML='<div class="empty">Error al cargar. Intenta de nuevo.</div>'; }
+  }
+
+  function cardHist(c){
+    const d=document.createElement('div'); d.className='qcard';
+    const b = c.estado==='aceptada' ? '<span class="badge ok">Aceptada</span>' : '<span class="badge bad">Rechazada</span>';
+    d.innerHTML='<div class="qhead"><span class="qnum mono">'+esc(c.numero||'')+'</span>'+b+'</div>'+
+      '<div class="qobra">Obra: '+esc(c.obra||'')+' · '+esc(fmtFecha(c.fecha))+'</div>'+
+      '<div class="tot grand"><span>Total</span><span class="mono">'+money(c.total)+'</span></div>';
+    return d;
+  }
+
+  function cardPend(c){
+    const d=document.createElement('div'); d.className='qcard pend';
+    d.innerHTML='<div class="qhead"><span class="qnum mono">'+esc(c.numero||'')+'</span><span class="badge pend">Pendiente</span></div>'+
+      '<div class="qobra">Obra: '+esc(c.obra||'')+' · '+esc(fmtFecha(c.fecha))+'</div>'+
+      '<div class="detbox"><div class="empty" style="padding:12px">Cargando detalle...</div></div>'+
+      '<div class="acts"><button class="bAcc">Aceptar</button><button class="bRej">Rechazar</button></div>';
+    d.querySelector('.bAcc').onclick=()=>confirmEstado(c,'aceptada');
+    d.querySelector('.bRej').onclick=()=>confirmEstado(c,'rechazada');
+    cargarDetalle(c.cot_id, d.querySelector('.detbox'));
+    return d;
+  }
+
+  async function cargarDetalle(cotId, box){
+    try{
+      const lins = await rpc('rcd_cliente_cot_lineas', {p_cliente_id:ses.cliente_id, p_cot_id:cotId});
+      const arr = Array.isArray(lins)?lins:[];
+      let sub=0, iva=0;
+      arr.forEach(l=>{ const lt=(+l.cantidad||0)*(+l.precio_unit||0); sub+=lt; if(l.aplica_iva) iva+=lt*0.19; });
+      const total=sub+iva;
+      const filas = arr.map(l=>{ const lt=(+l.cantidad||0)*(+l.precio_unit||0);
+        return '<tr><td>'+esc(l.descripcion||'')+'</td><td class="r mono">'+(+l.cantidad||0).toLocaleString('es-CO')+'</td>'+
+          '<td class="r mono">'+money(l.precio_unit)+'</td><td class="r mono">'+money(lt)+'</td></tr>'; }).join('');
+      box.innerHTML='<table class="det"><tr><th>Concepto</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Subtotal</th></tr>'+
+        (filas||'<tr><td colspan="4">Sin lineas</td></tr>')+'</table>'+
+        '<div class="tot"><span>Subtotal</span><span class="mono">'+money(sub)+'</span></div>'+
+        '<div class="tot"><span>IVA (19%)</span><span class="mono">'+money(iva)+'</span></div>'+
+        '<div class="tot grand"><span>TOTAL</span><span class="mono">'+money(total)+'</span></div>';
+    }catch(e){ box.innerHTML='<div class="empty" style="padding:12px">No se pudo cargar el detalle.</div>'; }
+  }
+
+  function confirmEstado(c, estado){
+    const acc = estado==='aceptada';
+    const msg = acc ? 'Vas a ACEPTAR la cotizacion '+(c.numero||'')+'. Se habilitara la obra para tus pedidos.'
+                    : 'Vas a RECHAZAR la cotizacion '+(c.numero||'')+'.';
+    openModal('<h3>'+(acc?'Aceptar cotizacion':'Rechazar cotizacion')+'</h3>'+
+      '<p style="font-size:13.5px;color:var(--muted);line-height:1.5;margin:0 0 16px">'+esc(msg)+'</p>'+
+      '<div style="display:flex;gap:8px"><button class="bAcc" id="mOk" style="flex:1">'+(acc?'Si, aceptar':'Si, rechazar')+'</button>'+
+      '<button class="bRej" id="mNo">Cancelar</button></div>');
+    $('mNo').onclick=closeModal;
+    $('mOk').onclick=async()=>{
+      $('mOk').disabled=true; $('mOk').textContent='Procesando...';
+      try{
+        const r = await rpc('rcd_cliente_cot_estado', {p_cliente_id:ses.cliente_id, p_cot_id:c.cot_id, p_estado:estado});
+        closeModal();
+        if(r==='OK'){ toast(acc?'Cotizacion aceptada':'Cotizacion rechazada'); cargarCotizaciones(); }
+        else if(r==='NO_PERMITIDO'){ toast('Esta cotizacion ya no se puede cambiar.', true); cargarCotizaciones(); }
+        else { toast('No se pudo procesar.', true); }
+      }catch(e){ closeModal(); toast('Error de conexion.', true); }
+    };
+  }
+
+  function abrirClave(){
+    openModal('<h3>Cambiar mi clave</h3>'+
+      '<div class="field"><label>Clave actual</label><input id="kAct" type="password"></div>'+
+      '<div class="field"><label>Clave nueva (min. 4)</label><input id="kNue" type="password"></div>'+
+      '<div class="err" id="kErr"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="bAcc" id="kOk" style="flex:1">Guardar</button>'+
+      '<button class="bRej" id="kNo">Cancelar</button></div>');
+    $('kNo').onclick=closeModal;
+    $('kOk').onclick=async()=>{
+      const a=$('kAct').value.trim(), n=$('kNue').value.trim(); const e=$('kErr');
+      e.classList.remove('show');
+      if(n.length<4){ e.textContent='La clave nueva debe tener al menos 4 caracteres.'; e.classList.add('show'); return; }
+      $('kOk').disabled=true; $('kOk').textContent='Guardando...';
+      try{
+        const r = await rpc('rcd_cliente_cambiar_clave', {p_cliente_id:ses.cliente_id, p_actual:a, p_nueva:n});
+        if(r==='OK'){ closeModal(); ses.clave_default=(n==='0000'); sessionStorage.setItem('rcd_cli_ses',JSON.stringify(ses)); $('keyWarn').innerHTML=''; toast('Clave actualizada'); }
+        else if(r==='CLAVE_ACTUAL_MAL'){ e.textContent='La clave actual no es correcta.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+        else if(r==='CLAVE_CORTA'){ e.textContent='La clave nueva es muy corta.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+        else { e.textContent='No se pudo cambiar.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+      }catch(err){ e.textContent='Error de conexion.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+    };
+  }
+
+  function openModal(html){ $('modalRoot').innerHTML='<div class="modal"><div class="box">'+html+'</div></div>'; }
+  function closeModal(){ $('modalRoot').innerHTML=''; }
+  function fmtFecha(f){ if(!f) return ''; const p=String(f).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):f; }
+
+  document.addEventListener('keydown', e=>{ if(e.key==='Enter' && !$('vLogin').classList.contains('hidden')) entrar(); });
+  (function init(){ const s=sessionStorage.getItem('rcd_cli_ses'); if(s){ try{ ses=JSON.parse(s); mostrarPanel(); }catch(e){} } })();
+</script>
+</body>
+</html>
