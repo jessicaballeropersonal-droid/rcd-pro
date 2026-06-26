@@ -230,11 +230,11 @@
         '<div class="field"><label>Peso</label><div class="neto" id="mNetoV">—</div></div></div>'+
       '<div class="field"><label>Observaciones (opcional)</label><input id="mObs" placeholder="Notas del Anexo II"></div>'+
       '<div class="err" id="mErr"></div>'+
-      '<button class="bCerrar" id="mOk">Guardar entrada</button>'+
+      '<button class="bCerrar" id="mOk">Guardar bruto · pendiente tara</button>'+
       '<button class="bGhost" id="mNo">Cancelar</button>'
     );
     let metodo='bascula', fotoFile=null;
-    function txtOk(){ return metodo==='bascula' ? 'Guardar entrada (bruto)' : 'Marcar Dispuesto y cerrar'; }
+    function txtOk(){ return metodo==='bascula' ? 'Guardar bruto · pendiente tara' : 'Marcar Dispuesto y cerrar'; }
     $('mOk').textContent=txtOk();
     $('mNo').onclick=closeModal;
     $('fbox').onclick=()=>$('fInput').click();
