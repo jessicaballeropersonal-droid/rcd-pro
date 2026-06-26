@@ -190,19 +190,27 @@
   function cardOrden(o){
     const d=document.createElement('div'); d.className='ocard hot';
     const fotoTxt = o.foto_cargue_url ? 'Foto de cargue: enviada' : 'Sin foto de cargue';
-    d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span><span class="badge">En ruta a disposicion</span></div>'+
+    const esperaTara = o.espera_tara===true;
+    const badge = esperaTara
+      ? '<span class="badge" style="background:#FAEEDA;color:#854F0B">Esperando salida (tara)</span>'
+      : '<span class="badge">En ruta a disposicion</span>';
+    const btn = esperaTara
+      ? '<button class="bRecibir" style="background:#854F0B">Registrar tara (salida) y cerrar</button>'
+      : '<button class="bRecibir">Recibir y registrar Anexo II</button>';
+    let extra='';
+    if(esperaTara) extra='<i class="ti ti-scale"></i>Bruto: '+numEs(o.bruto_t)+' t · falta la tara<br>';
+    d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span>'+badge+'</div>'+
       '<div class="oinfo">'+
       '<i class="ti ti-license"></i>Placa: '+esc(o.placa||'—')+(o.volquetero?(' · '+esc(o.volquetero)):'')+'<br>'+
       '<i class="ti ti-map-pin"></i>'+esc(o.obra||'—')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
-      '<i class="ti ti-photo"></i>'+fotoTxt+'</div>'+
-      '<button class="bRecibir">Recibir y registrar Anexo II</button>';
-    d.querySelector('.bRecibir').onclick=()=>abrirRecibir(o);
+      extra+'<i class="ti ti-photo"></i>'+fotoTxt+'</div>'+btn;
+    d.querySelector('.bRecibir').onclick=()=> esperaTara ? abrirTara(o) : abrirRecibir(o);
     return d;
   }
 
   function abrirRecibir(o){
     const matOpts = materiales.length
-      ? materiales.map(m=>'<option value="'+m.id+'">'+esc(m.nombre)+'</option>').join('')
+      ? materiales.map(m=>'<option value="'+m.id+'">'+esc(m.codigo)+' · '+esc(m.nombre)+'</option>').join('')
       : '<option value="">(sin materiales)</option>';
     openModal(
       '<h3>Recibir '+esc(o.numero||'')+'</h3>'+
@@ -214,19 +222,20 @@
       '<div class="field"><label>Metodo</label><div class="seg" id="mSeg">'+
         '<button data-m="bascula" class="on">Bascula</button><button data-m="volumen">Volumen</button></div></div>'+
       '<div id="mBascula">'+
-        '<div class="field"><label>Peso bruto (t)</label><input id="mBruto" inputmode="decimal" placeholder="0,00"></div>'+
-        '<div class="field"><label>Tara / vacio (t)</label><input id="mTara" inputmode="decimal" placeholder="0,00"></div>'+
-        '<div class="field"><label>Neto</label><div class="neto" id="mNetoB">—</div></div></div>'+
+        '<div class="field"><label>Peso bruto — entrada (t)</label><input id="mBruto" inputmode="decimal" placeholder="0,00"></div>'+
+        '<div class="note" style="font-size:12px;color:var(--muted);margin:-4px 0 10px">La tara (vacio) se registra cuando el camion sale.</div></div>'+
       '<div id="mVolumen" style="display:none">'+
         '<div class="field"><label>Volumen (m³)</label><input id="mVol" inputmode="decimal" placeholder="0,00"></div>'+
         '<div class="field"><label>Densidad (t/m³)</label><input id="mDens" inputmode="decimal" placeholder="0,00"></div>'+
         '<div class="field"><label>Peso</label><div class="neto" id="mNetoV">—</div></div></div>'+
       '<div class="field"><label>Observaciones (opcional)</label><input id="mObs" placeholder="Notas del Anexo II"></div>'+
       '<div class="err" id="mErr"></div>'+
-      '<button class="bCerrar" id="mOk">Marcar Dispuesto y cerrar</button>'+
+      '<button class="bCerrar" id="mOk">Guardar entrada</button>'+
       '<button class="bGhost" id="mNo">Cancelar</button>'
     );
     let metodo='bascula', fotoFile=null;
+    function txtOk(){ return metodo==='bascula' ? 'Guardar entrada (bruto)' : 'Marcar Dispuesto y cerrar'; }
+    $('mOk').textContent=txtOk();
     $('mNo').onclick=closeModal;
     $('fbox').onclick=()=>$('fInput').click();
     $('fInput').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; fotoFile=f;
@@ -235,45 +244,77 @@
       metodo=b.dataset.m; $('mSeg').querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
       $('mBascula').style.display = metodo==='bascula'?'':'none';
       $('mVolumen').style.display = metodo==='volumen'?'':'none';
+      $('mOk').textContent=txtOk();
     });
-    function calcB(){ const b=parseNum($('mBruto').value), t=parseNum($('mTara').value);
-      $('mNetoB').textContent=(b>0&&t>0&&t<b)?numEs(Math.round((b-t)*1000)/1000)+' t':'—'; }
     function calcV(){ const v=parseNum($('mVol').value), d=parseNum($('mDens').value);
       $('mNetoV').textContent=(v>0&&d>0)?numEs(Math.round(v*d*1000)/1000)+' t':'—'; }
-    $('mBruto').oninput=calcB; $('mTara').oninput=calcB; $('mVol').oninput=calcV; $('mDens').oninput=calcV;
+    $('mVol').oninput=calcV; $('mDens').oninput=calcV;
 
     $('mOk').onclick=async()=>{
       const err=$('mErr'); err.classList.remove('show');
       const mat=$('mMat').value;
       if(!mat){ err.textContent='Selecciona el material.'; err.classList.add('show'); return; }
-      let bruto=null,tara=null,vol=null,dens=null;
-      if(metodo==='bascula'){ bruto=parseNum($('mBruto').value); tara=parseNum($('mTara').value);
-        if(!(bruto>0)){ err.textContent='Escribe el peso bruto.'; err.classList.add('show'); return; }
-        if(!(tara>0)){ err.textContent='Escribe la tara (vacio).'; err.classList.add('show'); return; }
-        if(tara>=bruto){ err.textContent='La tara no puede ser mayor o igual al bruto.'; err.classList.add('show'); return; }
+      let bruto=null,vol=null,dens=null;
+      if(metodo==='bascula'){ bruto=parseNum($('mBruto').value);
+        if(!(bruto>0)){ err.textContent='Escribe el peso bruto (entrada).'; err.classList.add('show'); return; }
       } else { vol=parseNum($('mVol').value); dens=parseNum($('mDens').value);
         if(!(vol>0)||!(dens>0)){ err.textContent='Volumen y densidad deben ser mayores a cero.'; err.classList.add('show'); return; } }
       if(!fotoFile){ err.textContent='Toma la foto de la descarga.'; err.classList.add('show'); return; }
       $('mOk').disabled=true; $('mOk').textContent='Subiendo foto...';
       try{
         const fotoUrl=await subirFoto(fotoFile, 'disp_'+(o.numero||'ord'));
-        $('mOk').textContent='Cerrando...';
+        $('mOk').textContent= metodo==='bascula' ? 'Guardando...' : 'Cerrando...';
         const r=await rpc('rcd_operador_recibir', {
           p_operador_id:ses.operador_id, p_orden_id:o.orden_id, p_tipo_residuo_id:mat, p_metodo:metodo,
-          p_bruto_t:bruto, p_tara_t:tara, p_volumen_m3:vol, p_densidad:dens, p_observaciones:$('mObs').value||null, p_foto_url:fotoUrl });
+          p_bruto_t:bruto, p_tara_t:null, p_volumen_m3:vol, p_densidad:dens, p_observaciones:$('mObs').value||null, p_foto_url:fotoUrl });
         if(typeof r==='string' && (r.startsWith('PES-')||r.startsWith('PEND:'))){
           closeModal();
-          toast(r.startsWith('PEND:')?('Recibido '+r.slice(5)+' (excede tope, pendiente)'):('Dispuesto · '+r));
+          if(metodo==='bascula') toast('Entrada guardada · falta la tara');
+          else toast(r.startsWith('PEND:')?('Recibido '+r.slice(5)+' (excede tope)'):('Dispuesto · '+r));
           cargarOrdenes();
         } else {
           const msgs={OPERADOR_INVALIDO:'Sesion invalida.',SIN_MATERIAL:'Selecciona el material.',METODO_INVALIDO:'Metodo invalido.',
             ORDEN_INVALIDA:'La orden no es valida.',ORDEN_NO_RECIBIBLE:'La orden ya no se puede recibir.',
             VOLUMEN_DENSIDAD:'Volumen y densidad deben ser mayores a cero.',SIN_BRUTO:'Escribe el peso bruto.',TARA_MAYOR:'La tara no puede ser mayor al bruto.'};
           err.textContent=msgs[r]||('No se pudo ('+esc(r)+').'); err.classList.add('show');
-          $('mOk').disabled=false; $('mOk').textContent='Marcar Dispuesto y cerrar';
+          $('mOk').disabled=false; $('mOk').textContent=txtOk();
         }
-      }catch(e){ err.textContent='Error al subir/cerrar. Revisa tu internet.'; err.classList.add('show');
-        $('mOk').disabled=false; $('mOk').textContent='Marcar Dispuesto y cerrar'; }
+      }catch(e){ err.textContent='Error al subir/guardar. Revisa tu internet.'; err.classList.add('show');
+        $('mOk').disabled=false; $('mOk').textContent=txtOk(); }
+    };
+  }
+
+  function abrirTara(o){
+    openModal(
+      '<h3>Registrar tara — '+esc(o.numero||'')+'</h3>'+
+      '<p class="msub">Pesada de salida (camion vacio). Bruto de entrada: '+numEs(o.bruto_t)+' t</p>'+
+      '<div class="field"><label>Tara / vacio (t)</label><input id="tTara" inputmode="decimal" placeholder="0,00"></div>'+
+      '<div class="field"><label>Neto que se recibe</label><div class="neto" id="tNeto">—</div></div>'+
+      '<div class="err" id="tErr"></div>'+
+      '<button class="bCerrar" id="tOk">Registrar tara y cerrar</button>'+
+      '<button class="bGhost" id="tNo">Cancelar</button>'
+    );
+    $('tNo').onclick=closeModal;
+    function calcT(){ const t=parseNum($('tTara').value), b=Number(o.bruto_t);
+      $('tNeto').textContent=(t>0&&t<b)?numEs(Math.round((b-t)*1000)/1000)+' t':'—'; }
+    $('tTara').oninput=calcT;
+    $('tOk').onclick=async()=>{
+      const e=$('tErr'); e.classList.remove('show');
+      const tara=parseNum($('tTara').value), b=Number(o.bruto_t);
+      if(!(tara>0)){ e.textContent='Escribe la tara (vacio).'; e.classList.add('show'); return; }
+      if(tara>=b){ e.textContent='La tara no puede ser mayor o igual al bruto.'; e.classList.add('show'); return; }
+      $('tOk').disabled=true; $('tOk').textContent='Cerrando...';
+      try{
+        const r=await rpc('rcd_operador_tara', {p_operador_id:ses.operador_id, p_recepcion_id:o.recepcion_id, p_tara_t:tara});
+        if(r==='OK'){ closeModal(); toast('Dispuesto y cerrado'); cargarOrdenes(); }
+        else if(r==='PEND'){ closeModal(); toast('Recibido (excede tope, pendiente)'); cargarOrdenes(); }
+        else {
+          const msgs={OPERADOR_INVALIDO:'Sesion invalida.',NO_EXISTE:'No se encontro la pesada.',NO_ESPERA_TARA:'Esta orden ya no espera tara.',SIN_TARA:'Escribe la tara.',TARA_MAYOR:'La tara no puede ser mayor al bruto.'};
+          e.textContent=msgs[r]||('No se pudo ('+esc(r)+').'); e.classList.add('show');
+          $('tOk').disabled=false; $('tOk').textContent='Registrar tara y cerrar';
+        }
+      }catch(err){ e.textContent='Error de conexion.'; e.classList.add('show');
+        $('tOk').disabled=false; $('tOk').textContent='Registrar tara y cerrar'; }
     };
   }
 
