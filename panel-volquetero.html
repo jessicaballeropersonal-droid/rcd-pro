@@ -61,6 +61,11 @@
   .bGo{width:100%;background:var(--orange);color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
   .bGo:hover{background:var(--orange-d)}
   .bDone{width:100%;background:var(--ok);color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
+  .bCarga{width:100%;background:#993C1D;color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
+  .bCarga:hover{background:#7a2f16}
+  .fotobox{width:100%;background:var(--esc-soft);border:1px dashed var(--esc);height:84px;border-radius:10px;font-size:13px;color:var(--esc-d);margin-bottom:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer}
+  .fotobox i{font-size:24px;margin-bottom:4px}
+  .fotoprev{width:100%;height:160px;object-fit:cover;border-radius:10px;margin-bottom:12px;display:none}
   .bGhost{width:100%;margin-top:8px;background:none;border:none;color:var(--esc);font-size:13px;font-weight:600;cursor:pointer}
   .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
   .modal{position:fixed;inset:0;background:rgba(20,40,36,.45);display:flex;align-items:center;justify-content:center;padding:24px;z-index:20}
@@ -139,6 +144,14 @@
     const r = await fetch(SUPABASE_URL+'/rest/v1/rpc/'+fn, {method:'POST', headers, body:JSON.stringify(body||{})});
     if(!r.ok) throw new Error('rpc '+fn+' '+r.status);
     return await r.json();
+  }
+  async function subirFoto(file, pref){
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+    const path=pref+'_'+Date.now()+'.'+ext;
+    const r=await fetch(SUPABASE_URL+'/storage/v1/object/rcd-fotos/'+path,{
+      method:'POST', headers:{'apikey':SUPABASE_ANON,'Authorization':'Bearer '+SUPABASE_ANON,'Content-Type':file.type||'image/jpeg'}, body:file });
+    if(!r.ok) throw new Error('upload '+r.status);
+    return SUPABASE_URL+'/storage/v1/object/public/rcd-fotos/'+path;
   }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function toast(msg, bad){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(bad?' bad':''); setTimeout(()=>t.className='toast',2200); }
@@ -247,16 +260,22 @@
 
   function cardViaje(o){
     const d=document.createElement('div'); d.className='ocard mine';
+    const esRecepcion = o.tipo==='recepcion';
     const badge = o.estado==='en_ruta' ? '<span class="badge ruta">En ruta</span>' : '<span class="badge asig">Asignada</span>';
     let btn='';
-    if(o.estado==='asignada') btn='<button class="bGo">Sali — marcar En ruta</button>';
-    else if(o.estado==='en_ruta') btn='<button class="bDone">Termine — Completar</button>';
+    if(esRecepcion){
+      btn='<button class="bCarga">Cargué — tomar foto y avisar</button>';
+    } else {
+      if(o.estado==='asignada') btn='<button class="bGo">Sali — marcar En ruta</button>';
+      else if(o.estado==='en_ruta') btn='<button class="bDone">Termine — Completar</button>';
+    }
     d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span>'+badge+'</div>'+
       '<div class="oinfo">'+tipoIcon(o.tipo)+' · '+esc(o.material||'')+'<br>'+
       '<i class="ti ti-map-pin"></i>'+esc(o.obra||'')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
       '<i class="ti ti-license"></i>Placa: '+esc(o.placa||'')+'</div>'+btn;
     const go=d.querySelector('.bGo'); if(go) go.onclick=()=>cambiarOrden(o,'en_ruta');
     const dn=d.querySelector('.bDone'); if(dn) dn.onclick=()=>cambiarOrden(o,'completada');
+    const ca=d.querySelector('.bCarga'); if(ca) ca.onclick=()=>marcarCargado(o);
     return d;
   }
 
@@ -276,6 +295,39 @@
         if(r==='OK'){ toast(acc?'Viaje en ruta':'Viaje completado'); cargarTodo(); }
         else { toast('No se pudo ('+esc(r)+').', true); cargarTodo(); }
       }catch(e){ closeModal(); toast('Error de conexion.', true); }
+    };
+  }
+
+  function marcarCargado(o){
+    openModal('<h3>Cargué — '+esc(o.numero||'')+'</h3>'+
+      '<p style="font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 12px">Toma una foto del material cargado. Al confirmar, el operador queda avisado de que vas en camino.</p>'+
+      '<div class="fotobox" id="fbox"><i class="ti ti-camera"></i>Tomar foto del cargue</div>'+
+      '<img id="fprev" class="fotoprev">'+
+      '<input id="fInput" type="file" accept="image/*" capture="environment" style="display:none">'+
+      '<div class="err" id="cErr"></div>'+
+      '<div style="display:flex;gap:8px"><button class="bCarga" id="mOk" style="flex:1">Confirmar cargado</button>'+
+      '<button class="salir" id="mNo" style="flex:0 0 auto">Cancelar</button></div>');
+    let fotoFile=null;
+    $('mNo').onclick=closeModal;
+    $('fbox').onclick=()=>$('fInput').click();
+    $('fInput').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; fotoFile=f;
+      const url=URL.createObjectURL(f); $('fprev').src=url; $('fprev').style.display='block'; $('fbox').style.display='none'; };
+    $('mOk').onclick=async()=>{
+      const e=$('cErr'); e.classList.remove('show');
+      if(!fotoFile){ e.textContent='Toma la foto del cargue.'; e.classList.add('show'); return; }
+      $('mOk').disabled=true; $('mOk').textContent='Subiendo foto...';
+      try{
+        const fotoUrl=await subirFoto(fotoFile, 'cargue_'+(o.numero||'ord'));
+        $('mOk').textContent='Avisando...';
+        const r=await rpc('rcd_volq_cargado', {p_volquetero_id:ses.volquetero_id, p_orden_id:o.orden_id, p_foto_url:fotoUrl});
+        closeModal();
+        if(r==='OK'){ toast('Cargado · operador avisado'); cargarTodo(); }
+        else {
+          const msgs={NO_TUYA:'Esta orden no es tuya.',NO_RECEPCION:'Esta orden no es de recepcion.',NO_APLICA:'La orden no esta lista para cargar.'};
+          toast(msgs[r]||('No se pudo ('+esc(r)+').'), true); cargarTodo();
+        }
+      }catch(err){ e.textContent='Error al subir la foto. Revisa tu internet.'; e.classList.add('show');
+        $('mOk').disabled=false; $('mOk').textContent='Confirmar cargado'; }
     };
   }
 
