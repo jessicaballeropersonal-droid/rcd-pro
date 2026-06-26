@@ -262,9 +262,15 @@
   function cardViaje(o){
     const d=document.createElement('div'); d.className='ocard mine';
     const esRecepcion = o.tipo==='recepcion';
-    const badge = o.estado==='en_ruta' ? '<span class="badge ruta">En ruta</span>' : '<span class="badge asig">Asignada</span>';
-    let btn='';
-    if(esRecepcion){
+    const yaCargado = o.estado==='en_ruta_disposicion';
+    let badge;
+    if(yaCargado) badge='<span class="badge" style="background:#FAEEDA;color:#854F0B">Esperando recepción</span>';
+    else if(o.estado==='en_ruta') badge='<span class="badge ruta">En ruta</span>';
+    else badge='<span class="badge asig">Asignada</span>';
+    let btn='', nota='';
+    if(yaCargado){
+      nota='<div style="font-size:12px;color:var(--muted);margin-top:8px"><i class="ti ti-clock"></i> Cargado. En la escombrera registran la recepción.</div>';
+    } else if(esRecepcion){
       btn='<button class="bCarga">Cargué — tomar foto y avisar</button>';
     } else {
       if(o.estado==='asignada') btn='<button class="bGo">Sali — marcar En ruta</button>';
@@ -273,7 +279,7 @@
     d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span>'+badge+'</div>'+
       '<div class="oinfo">'+tipoIcon(o.tipo)+' · '+esc(o.material||'')+'<br>'+
       '<i class="ti ti-map-pin"></i>'+esc(o.obra||'')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
-      '<i class="ti ti-license"></i>Placa: '+esc(o.placa||'')+'</div>'+btn;
+      '<i class="ti ti-license"></i>Placa: '+esc(o.placa||'')+'</div>'+btn+nota;
     const go=d.querySelector('.bGo'); if(go) go.onclick=()=>cambiarOrden(o,'en_ruta');
     const dn=d.querySelector('.bDone'); if(dn) dn.onclick=()=>cambiarOrden(o,'completada');
     const ca=d.querySelector('.bCarga'); if(ca) ca.onclick=()=>marcarCargado(o);
