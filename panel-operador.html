@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCD Pro · Portal del operador</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230F766E'/%3E%3Cpath d='M15 27 Q22.5 21.5 30 27 L30 30 L15 30 Z' fill='%23E8620A'/%3E%3Cpath d='M13 30 L32 30 L32 41 L15 41 Z' fill='%23ffffff'/%3E%3Cpath d='M34 30 L42 30 L46 36 L46 41 L34 41 Z' fill='%23ffffff'/%3E%3Crect x='13' y='41' width='33' height='3' fill='%230B4A45'/%3E%3Ccircle cx='21' cy='45.5' r='4.6' fill='%231A2B27'/%3E%3Ccircle cx='39' cy='45.5' r='4.6' fill='%231A2B27'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#E7E7E3;--surface:#FFFFFF;--ink:#1A2B27;--muted:#6E7A77;--line:#D9E2DF;
+    --esc:#0F766E;--esc-soft:#E2F3F0;--esc-d:#0B4A45;--orange:#E8620A;--orange-d:#B8490A;
+    --bad:#B91C1C;--ok:#0B6B4F;--amber:#854F0B;--amber-soft:#FAEEDA;--info:#0C447C;--info-soft:#E6F1FB;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(1100px 500px at 50% -10%, #DCEAE7 0%, transparent 60%),var(--bg);
+    color:var(--ink);font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'JetBrains Mono',monospace}
+  .wraplogin{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px rgba(15,118,110,.12);overflow:hidden}
+  .top{background:var(--orange);height:7px}
+  .pad{padding:28px 28px 24px}
+  .brandbox{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:8px}
+  .wordmark{font-weight:900;font-size:34px;letter-spacing:-.02em;color:var(--esc-d);line-height:1}
+  .wordmark b{color:var(--orange)}
+  .sub{font-size:12px;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+  .field input,.field select{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;-webkit-appearance:none}
+  .field input:focus,.field select:focus{outline:2px solid var(--orange);border-color:var(--orange)}
+  .enter{width:100%;background:var(--orange);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow';font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+  .enter:hover{background:var(--orange-d)}
+  .enter:disabled{opacity:.6;cursor:default}
+  .hint{margin-top:18px;background:var(--amber-soft);border:1px solid #F0D9A8;border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--amber);font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.5}
+  .err{margin-top:14px;background:#FBEAEA;border:1px solid #E7C2C2;border-radius:9px;padding:10px 12px;font-size:12.5px;color:var(--bad);text-align:center;display:none}
+  .err.show{display:block}
+  .hidden{display:none}
+  .appbar{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+  .who{display:flex;align-items:center;gap:10px}
+  .ava{width:36px;height:36px;border-radius:9px;background:var(--info-soft);color:var(--info);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+  .who .nm{font-weight:700;font-size:14px;line-height:1.15}
+  .who .rl{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+  .salir{background:none;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-family:'Barlow';font-size:13px;color:var(--ink);cursor:pointer}
+  .container{max-width:560px;margin:0 auto;padding:16px}
+  .secttl{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin:4px 4px 8px}
+  .ocard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:11px}
+  .ocard.hot{border:2px solid var(--info)}
+  .ohead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .onum{font-weight:700;font-size:15px}
+  .badge{font-size:11px;padding:2px 9px;border-radius:8px;font-weight:600;background:var(--info-soft);color:var(--info)}
+  .oinfo{font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:10px}
+  .oinfo i{font-size:14px;vertical-align:-2px;margin-right:5px}
+  .bRecibir{width:100%;background:var(--esc);color:#fff;border:none;height:42px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
+  .bRecibir:hover{background:var(--esc-d)}
+  .bCerrar{width:100%;background:var(--orange);color:#fff;border:none;height:46px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
+  .bCerrar:hover{background:var(--orange-d)}
+  .bCerrar:disabled{opacity:.6;cursor:default}
+  .bGhost{width:100%;margin-top:8px;background:none;border:none;color:var(--esc);font-size:13px;font-weight:600;cursor:pointer}
+  .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
+  .fotobox{width:100%;background:var(--esc-soft);border:1px dashed var(--esc);height:84px;border-radius:10px;font-size:13px;color:var(--esc-d);margin-bottom:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer}
+  .fotobox i{font-size:24px;margin-bottom:4px}
+  .fotoprev{width:100%;height:160px;object-fit:cover;border-radius:10px;margin-bottom:12px;display:none}
+  .seg{display:flex;gap:6px;margin-bottom:12px}
+  .seg button{flex:1;padding:10px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+  .seg button.on{background:var(--esc);color:#fff;border-color:var(--esc)}
+  .neto{font-size:20px;font-weight:800;color:var(--esc-d);font-family:'JetBrains Mono',monospace}
+  .modal{position:fixed;inset:0;background:rgba(20,40,36,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+  .modal .box{background:#fff;border-radius:18px 18px 0 0;max-width:560px;width:100%;padding:20px;max-height:92vh;overflow-y:auto}
+  .modal h3{margin:0 0 4px;font-size:18px}
+  .modal .msub{font-size:12.5px;color:var(--muted);margin:0 0 14px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--esc-d);color:#fff;padding:11px 18px;border-radius:10px;font-size:13.5px;z-index:40;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .toast.bad{background:var(--bad)}
+</style>
+</head>
+<body>
+
+  <div id="vLogin" class="wraplogin">
+    <div class="card">
+      <div class="top"></div>
+      <div class="pad">
+        <div class="brandbox">
+          <svg width="62" height="62" viewBox="0 0 64 64" style="margin-bottom:10px" aria-label="RCD Pro">
+            <rect width="64" height="64" rx="15" fill="#0F766E"/>
+            <path d="M15 27 Q22.5 21.5 30 27 L30 30 L15 30 Z" fill="#E8620A"/>
+            <path d="M13 30 L32 30 L32 41 L15 41 Z" fill="#fff"/>
+            <path d="M34 30 L42 30 L46 36 L46 41 L34 41 Z" fill="#fff"/>
+            <path d="M36 32 L41 32 L43.3 35.4 L36 35.4 Z" fill="#0F766E"/>
+            <rect x="13" y="41" width="33" height="3" fill="#0B4A45"/>
+            <circle cx="21" cy="45.5" r="4.6" fill="#1A2B27"/>
+            <circle cx="21" cy="45.5" r="2" fill="#fff"/>
+            <circle cx="39" cy="45.5" r="4.6" fill="#1A2B27"/>
+            <circle cx="39" cy="45.5" r="2" fill="#fff"/>
+          </svg>
+          <div class="wordmark">RCD <b>Pro</b></div><div class="sub">Portal del operador</div>
+        </div>
+        <div class="field"><label>Documento (cedula o NIT)</label><input id="inDoc" inputmode="numeric" placeholder="tu numero de documento"></div>
+        <div class="field"><label>Clave</label><input id="inClave" type="password" placeholder="tu clave"></div>
+        <button class="enter" id="bEntrar" onclick="entrar()">Entrar</button>
+        <div class="err" id="loginErr"></div>
+        <div class="hint">Tu clave por defecto es 0000. Podras cambiarla dentro del portal.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="vPanel" class="hidden">
+    <div class="appbar">
+      <div class="who"><div class="ava" id="ava">O</div><div><div class="nm" id="nmOp">Operador</div><div class="rl">Portal del operador</div></div></div>
+      <button class="salir" onclick="salir()">Salir</button>
+    </div>
+    <div class="container">
+      <div id="keyWarn"></div>
+      <div class="secttl">En camino a disposicion</div>
+      <div id="ordenes"><div class="empty">Cargando...</div></div>
+      <div class="ocard"><button class="bGhost" style="margin:0" onclick="abrirClave()">Cambiar mi clave</button></div>
+    </div>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast"></div>
+
+<script>
+  const SUPABASE_URL  = "https://ymzxjuncantobxeftfqd.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltenhqdW5jYW50b2J4ZWZ0ZnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMzM0ODUsImV4cCI6MjA5MjgwOTQ4NX0.p1K6pvZy-Agb2J-mKF2MNR5ujrTfRjmvtTyP3QiIzu8";
+  const headers = { 'Content-Type':'application/json', 'apikey':SUPABASE_ANON, 'Authorization':'Bearer '+SUPABASE_ANON };
+  const $ = id => document.getElementById(id);
+  let ses=null, materiales=[];
+
+  async function rpc(fn, body){
+    const r = await fetch(SUPABASE_URL+'/rest/v1/rpc/'+fn, {method:'POST', headers, body:JSON.stringify(body||{})});
+    if(!r.ok) throw new Error('rpc '+fn+' '+r.status);
+    return await r.json();
+  }
+  async function subirFoto(file, pref){
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+    const path=pref+'_'+Date.now()+'.'+ext;
+    const r=await fetch(SUPABASE_URL+'/storage/v1/object/rcd-fotos/'+path,{
+      method:'POST', headers:{'apikey':SUPABASE_ANON,'Authorization':'Bearer '+SUPABASE_ANON,'Content-Type':file.type||'image/jpeg'}, body:file });
+    if(!r.ok) throw new Error('upload '+r.status);
+    return SUPABASE_URL+'/storage/v1/object/public/rcd-fotos/'+path;
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function toast(msg,bad){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(bad?' bad':''); setTimeout(()=>t.className='toast',2400); }
+  function loginErr(m){ const e=$('loginErr'); e.textContent=m; e.classList.add('show'); }
+  function numEs(n){ return (n==null||isNaN(n))?'—':Number(n).toLocaleString('es-CO',{maximumFractionDigits:3}); }
+  function parseNum(s){ if(s==null) return null; s=String(s).trim().replace(/\./g,'').replace(',', '.'); const n=parseFloat(s); return isNaN(n)?null:n; }
+
+  async function entrar(){
+    const doc=$('inDoc').value.trim(), clave=$('inClave').value.trim();
+    $('loginErr').classList.remove('show');
+    if(!doc){ loginErr('Escribe tu documento.'); return; }
+    if(!clave){ loginErr('Escribe tu clave.'); return; }
+    $('bEntrar').disabled=true; $('bEntrar').textContent='Entrando...';
+    try{
+      const d=await rpc('rcd_operador_login', {p_doc:doc, p_clave:clave});
+      if(Array.isArray(d) && d.length){
+        ses=d[0]; sessionStorage.setItem('rcd_op_ses', JSON.stringify(ses)); mostrarPanel();
+      } else { loginErr('Documento o clave incorrectos.'); }
+    }catch(e){ loginErr('No se pudo conectar. Revisa tu internet.'); }
+    finally{ $('bEntrar').disabled=false; $('bEntrar').textContent='Entrar'; }
+  }
+
+  function salir(){ sessionStorage.removeItem('rcd_op_ses'); ses=null; $('vPanel').classList.add('hidden'); $('vLogin').classList.remove('hidden'); $('inClave').value=''; }
+
+  function mostrarPanel(){
+    $('vLogin').classList.add('hidden'); $('vPanel').classList.remove('hidden');
+    $('nmOp').textContent = ses.nombre || 'Operador';
+    $('ava').textContent = (ses.nombre||'O').trim().charAt(0).toUpperCase();
+    $('keyWarn').innerHTML = ses.clave_default
+      ? '<div style="background:#FFF7E8;border:1px solid #F0D9A8;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#8A5A00;margin-bottom:10px">Estas usando la clave por defecto (0000). Cambiala abajo.</div>' : '';
+    cargarMateriales(); cargarOrdenes();
+  }
+
+  async function cargarMateriales(){
+    try{ const r=await rpc('rcd_operador_materiales',{p_operador_id:ses.operador_id}); materiales=Array.isArray(r)?r:[]; }catch(e){ materiales=[]; }
+  }
+
+  async function cargarOrdenes(){
+    const box=$('ordenes'); box.innerHTML='<div class="empty">Cargando...</div>';
+    try{
+      const arr=await rpc('rcd_operador_ordenes', {p_operador_id:ses.operador_id});
+      const os=Array.isArray(arr)?arr:[];
+      if(!os.length){ box.innerHTML='<div class="empty">No hay camiones en camino ahora.</div>'; return; }
+      box.innerHTML=''; os.forEach(o=>box.appendChild(cardOrden(o)));
+    }catch(e){ box.innerHTML='<div class="empty">Error al cargar.</div>'; }
+  }
+
+  function cardOrden(o){
+    const d=document.createElement('div'); d.className='ocard hot';
+    const fotoTxt = o.foto_cargue_url ? 'Foto de cargue: enviada' : 'Sin foto de cargue';
+    d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span><span class="badge">En ruta a disposicion</span></div>'+
+      '<div class="oinfo">'+
+      '<i class="ti ti-license"></i>Placa: '+esc(o.placa||'—')+(o.volquetero?(' · '+esc(o.volquetero)):'')+'<br>'+
+      '<i class="ti ti-map-pin"></i>'+esc(o.obra||'—')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
+      '<i class="ti ti-photo"></i>'+fotoTxt+'</div>'+
+      '<button class="bRecibir">Recibir y registrar Anexo II</button>';
+    d.querySelector('.bRecibir').onclick=()=>abrirRecibir(o);
+    return d;
+  }
+
+  function abrirRecibir(o){
+    const matOpts = materiales.length
+      ? materiales.map(m=>'<option value="'+m.id+'">'+esc(m.nombre)+'</option>').join('')
+      : '<option value="">(sin materiales)</option>';
+    openModal(
+      '<h3>Recibir '+esc(o.numero||'')+'</h3>'+
+      '<p class="msub">Placa '+esc(o.placa||'—')+' · '+esc(o.obra||'')+'</p>'+
+      '<div class="field"><label>Foto de la descarga (Anexo II)</label>'+
+        '<div class="fotobox" id="fbox"><i class="ti ti-camera"></i>Tomar foto</div>'+
+        '<img id="fprev" class="fotoprev"><input id="fInput" type="file" accept="image/*" capture="environment" style="display:none"></div>'+
+      '<div class="field"><label>Material / tipo de RCD</label><select id="mMat">'+matOpts+'</select></div>'+
+      '<div class="field"><label>Metodo</label><div class="seg" id="mSeg">'+
+        '<button data-m="bascula" class="on">Bascula</button><button data-m="volumen">Volumen</button></div></div>'+
+      '<div id="mBascula">'+
+        '<div class="field"><label>Peso bruto (t)</label><input id="mBruto" inputmode="decimal" placeholder="0,00"></div>'+
+        '<div class="field"><label>Tara / vacio (t)</label><input id="mTara" inputmode="decimal" placeholder="0,00"></div>'+
+        '<div class="field"><label>Neto</label><div class="neto" id="mNetoB">—</div></div></div>'+
+      '<div id="mVolumen" style="display:none">'+
+        '<div class="field"><label>Volumen (m³)</label><input id="mVol" inputmode="decimal" placeholder="0,00"></div>'+
+        '<div class="field"><label>Densidad (t/m³)</label><input id="mDens" inputmode="decimal" placeholder="0,00"></div>'+
+        '<div class="field"><label>Peso</label><div class="neto" id="mNetoV">—</div></div></div>'+
+      '<div class="field"><label>Observaciones (opcional)</label><input id="mObs" placeholder="Notas del Anexo II"></div>'+
+      '<div class="err" id="mErr"></div>'+
+      '<button class="bCerrar" id="mOk">Marcar Dispuesto y cerrar</button>'+
+      '<button class="bGhost" id="mNo">Cancelar</button>'
+    );
+    let metodo='bascula', fotoFile=null;
+    $('mNo').onclick=closeModal;
+    $('fbox').onclick=()=>$('fInput').click();
+    $('fInput').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; fotoFile=f;
+      const url=URL.createObjectURL(f); $('fprev').src=url; $('fprev').style.display='block'; $('fbox').style.display='none'; };
+    $('mSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+      metodo=b.dataset.m; $('mSeg').querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+      $('mBascula').style.display = metodo==='bascula'?'':'none';
+      $('mVolumen').style.display = metodo==='volumen'?'':'none';
+    });
+    function calcB(){ const b=parseNum($('mBruto').value), t=parseNum($('mTara').value);
+      $('mNetoB').textContent=(b>0&&t>0&&t<b)?numEs(Math.round((b-t)*1000)/1000)+' t':'—'; }
+    function calcV(){ const v=parseNum($('mVol').value), d=parseNum($('mDens').value);
+      $('mNetoV').textContent=(v>0&&d>0)?numEs(Math.round(v*d*1000)/1000)+' t':'—'; }
+    $('mBruto').oninput=calcB; $('mTara').oninput=calcB; $('mVol').oninput=calcV; $('mDens').oninput=calcV;
+
+    $('mOk').onclick=async()=>{
+      const err=$('mErr'); err.classList.remove('show');
+      const mat=$('mMat').value;
+      if(!mat){ err.textContent='Selecciona el material.'; err.classList.add('show'); return; }
+      let bruto=null,tara=null,vol=null,dens=null;
+      if(metodo==='bascula'){ bruto=parseNum($('mBruto').value); tara=parseNum($('mTara').value);
+        if(!(bruto>0)){ err.textContent='Escribe el peso bruto.'; err.classList.add('show'); return; }
+        if(!(tara>0)){ err.textContent='Escribe la tara (vacio).'; err.classList.add('show'); return; }
+        if(tara>=bruto){ err.textContent='La tara no puede ser mayor o igual al bruto.'; err.classList.add('show'); return; }
+      } else { vol=parseNum($('mVol').value); dens=parseNum($('mDens').value);
+        if(!(vol>0)||!(dens>0)){ err.textContent='Volumen y densidad deben ser mayores a cero.'; err.classList.add('show'); return; } }
+      if(!fotoFile){ err.textContent='Toma la foto de la descarga.'; err.classList.add('show'); return; }
+      $('mOk').disabled=true; $('mOk').textContent='Subiendo foto...';
+      try{
+        const fotoUrl=await subirFoto(fotoFile, 'disp_'+(o.numero||'ord'));
+        $('mOk').textContent='Cerrando...';
+        const r=await rpc('rcd_operador_recibir', {
+          p_operador_id:ses.operador_id, p_orden_id:o.orden_id, p_tipo_residuo_id:mat, p_metodo:metodo,
+          p_bruto_t:bruto, p_tara_t:tara, p_volumen_m3:vol, p_densidad:dens, p_observaciones:$('mObs').value||null, p_foto_url:fotoUrl });
+        if(typeof r==='string' && (r.startsWith('PES-')||r.startsWith('PEND:'))){
+          closeModal();
+          toast(r.startsWith('PEND:')?('Recibido '+r.slice(5)+' (excede tope, pendiente)'):('Dispuesto · '+r));
+          cargarOrdenes();
+        } else {
+          const msgs={OPERADOR_INVALIDO:'Sesion invalida.',SIN_MATERIAL:'Selecciona el material.',METODO_INVALIDO:'Metodo invalido.',
+            ORDEN_INVALIDA:'La orden no es valida.',ORDEN_NO_RECIBIBLE:'La orden ya no se puede recibir.',
+            VOLUMEN_DENSIDAD:'Volumen y densidad deben ser mayores a cero.',SIN_BRUTO:'Escribe el peso bruto.',TARA_MAYOR:'La tara no puede ser mayor al bruto.'};
+          err.textContent=msgs[r]||('No se pudo ('+esc(r)+').'); err.classList.add('show');
+          $('mOk').disabled=false; $('mOk').textContent='Marcar Dispuesto y cerrar';
+        }
+      }catch(e){ err.textContent='Error al subir/cerrar. Revisa tu internet.'; err.classList.add('show');
+        $('mOk').disabled=false; $('mOk').textContent='Marcar Dispuesto y cerrar'; }
+    };
+  }
+
+  function abrirClave(){
+    openModal('<h3>Cambiar mi clave</h3><p class="msub">Minimo 4 caracteres.</p>'+
+      '<div class="field"><label>Clave actual</label><input id="kAct" type="password"></div>'+
+      '<div class="field"><label>Clave nueva</label><input id="kNue" type="password"></div>'+
+      '<div class="err" id="kErr"></div>'+
+      '<button class="bCerrar" id="kOk" style="background:var(--esc)">Guardar</button>'+
+      '<button class="bGhost" id="kNo">Cancelar</button>');
+    $('kNo').onclick=closeModal;
+    $('kOk').onclick=async()=>{
+      const a=$('kAct').value.trim(), n=$('kNue').value.trim(); const e=$('kErr'); e.classList.remove('show');
+      if(n.length<4){ e.textContent='La clave nueva debe tener al menos 4 caracteres.'; e.classList.add('show'); return; }
+      $('kOk').disabled=true; $('kOk').textContent='Guardando...';
+      try{
+        const r=await rpc('rcd_operador_cambiar_clave', {p_operador_id:ses.operador_id, p_actual:a, p_nueva:n});
+        if(r==='OK'){ closeModal(); ses.clave_default=(n==='0000'); sessionStorage.setItem('rcd_op_ses',JSON.stringify(ses)); $('keyWarn').innerHTML=''; toast('Clave actualizada'); }
+        else if(r==='CLAVE_ACTUAL_MAL'){ e.textContent='La clave actual no es correcta.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+        else { e.textContent='No se pudo cambiar.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+      }catch(err){ e.textContent='Error de conexion.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
+    };
+  }
+
+  function openModal(html){ $('modalRoot').innerHTML='<div class="modal"><div class="box">'+html+'</div></div>'; }
+  function closeModal(){ $('modalRoot').innerHTML=''; }
+
+  document.addEventListener('keydown', e=>{ if(e.key==='Enter' && !$('vLogin').classList.contains('hidden')) entrar(); });
+  (function init(){ const s=sessionStorage.getItem('rcd_op_ses'); if(s){ try{ ses=JSON.parse(s); mostrarPanel(); }catch(e){} } })();
+</script>
+</body>
+</html>
