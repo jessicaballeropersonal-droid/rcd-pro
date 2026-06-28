@@ -11,8 +11,8 @@ window.RCD_MODULOS.parametros = function(el, ctx){
     ['sucursales','Sucursales'],
     ['productos','Productos terminados'],
     ['densidades','Densidades'],
-    ['volquetas','Volquetas'],
-    ['municipios','Municipios'],
+    ['volquetas','Tamaño de volquetas'],
+    ['municipios','Meta aprovechamiento'],
     ['actividad','Actividad'],
     ['sistema','Sistema'],
     ['otros','Otros']
