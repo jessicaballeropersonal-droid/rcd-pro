@@ -12,11 +12,12 @@ window.RCD_MODULOS.precios = function(el, ctx){
   function money(n){ return Math.round(+n||0).toLocaleString('es-CO'); }
   function tabbar(activa){
     return '<div class="tabbar">'+
+      '<button class="tab'+(activa==='ar'?' active':'')+'" data-t="ar">Artículos</button>'+
       '<button class="tab'+(activa==='it'?' active':'')+'" data-t="it">Items (precio global)</button>'+
       '<button class="tab'+(activa==='mu'?' active':'')+'" data-t="mu">Municipios (transporte)</button>'+
       '</div>';
   }
-  function wireTabs(){ el.querySelectorAll('.tab[data-t]').forEach(function(b){ b.onclick=function(){ b.dataset.t==='it'?itemsView():muniList(); }; }); }
+  function wireTabs(){ el.querySelectorAll('.tab[data-t]').forEach(function(b){ b.onclick=function(){ var t=b.dataset.t; if(t==='ar') articulosView(); else if(t==='it') itemsView(); else muniList(); }; }); }
 
   async function cargarCat(){
     if(!MUNIS.length){ try{ const r=await ctx.rpc('rcd_municipios_lista',{p_gestor_id:ctx.ses.gestor_id}); MUNIS=Array.isArray(r)?r:[]; }catch(e){} }
@@ -28,6 +29,131 @@ window.RCD_MODULOS.precios = function(el, ctx){
     ALIADOS.filter(a=>a.es_receptor).forEach(a=>d.push({tipo:'otro_rcd',aliado:a.id,label:'Otro RCD: '+a.razon_social}));
     ALIADOS.filter(a=>a.es_maquila).forEach(a=>d.push({tipo:'maquila',aliado:a.id,label:'Maquila: '+a.razon_social}));
     return d;
+  }
+
+  // ===================== ARTICULOS (clasificacion TNS) =====================
+  async function articulosView(){
+    el.innerHTML='<div class="loading">Trayendo articulos de TNS...</div>';
+    const cfg = scalar(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id})) || {};
+    if(!cfg.tiene_credenciales){
+      el.innerHTML='<div class="mcard" style="max-width:820px">'+tabbar('ar')+'<div class="note warn">Conecta TNS en Facturacion -> Configuracion para traer los articulos.</div></div>';
+      wireTabs(); return;
+    }
+    let tns=null;
+    try{
+      tns = await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accion:'traer_materiales',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00'})}).then(x=>x.json());
+    }catch(e){ tns={ok:false,error:'NO_CONECTA'}; }
+    if(!(tns&&tns.ok)){
+      el.innerHTML='<div class="mcard" style="max-width:820px">'+tabbar('ar')+'<div class="note warn">No se pudo traer de TNS: '+esc((tns&&tns.error)||'sin conexion')+'.</div></div>';
+      wireTabs(); return;
+    }
+    const arts = tns.materiales||[];
+    let saved=[];
+    try{ const ss=await ctx.rpc('rcd_articulos_clasif_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(ss)) saved=ss; }catch(e){}
+    const map={}; saved.forEach(function(x){ if(x.cod_articulo) map[x.cod_articulo]=x; });
+
+    const DATA = arts.map(function(a){
+      const c=map[a.codigo]||{};
+      return { cod:a.codigo, desc:a.descripcion||'(sin descripcion)', clase:c.clase||'', sub:c.servicio_subtipo||'' };
+    }).filter(function(d){ return d.cod; });
+    let fSearch='', fFiltro='todos';
+    const syncTxt='TNS sincronizado \u00b7 '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    const puedeEditar = ctx.can('parametros','editar');
+
+    render();
+
+    function render(){
+      el.innerHTML=
+        '<div class="mcard" style="max-width:820px">'+
+        tabbar('ar')+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
+          '<div><h3 style="margin:0">Clasificacion de articulos</h3>'+
+          '<p class="lead" style="margin:4px 0 0">Los articulos se crean en TNS. Marca que es cada uno (una sola clase). Los precios son de TNS.</p></div>'+
+          '<span style="display:inline-flex;align-items:center;gap:7px;background:#E6F4EA;color:#15803D;font-size:12px;padding:6px 11px;border-radius:8px"><span style="width:8px;height:8px;border-radius:50%;background:#15803D"></span>'+esc(syncTxt)+'</span>'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;align-items:center;margin:10px 0 8px;flex-wrap:wrap">'+
+          '<input id="arSearch" placeholder="Buscar por descripcion o codigo..." style="flex:1;min-width:180px">'+
+          '<select id="arFiltro" style="width:auto">'+
+            '<option value="todos">Todos</option><option value="sin">Sin clasificar</option>'+
+            '<option value="producto">Producto</option><option value="servicio">Servicio</option>'+
+            '<option value="aprovechado">Aprovechado</option><option value="transporte">Transporte</option>'+
+          '</select>'+
+          '<span id="arCount" style="font-size:12px;color:#6E7A77;white-space:nowrap"></span>'+
+        '</div>'+
+        '<div id="arRows"></div>'+
+        '<div class="note" style="margin-top:10px">Clase unica por articulo. Se guarda solo. Desmarcar oculta pero conserva el historial.</div>'+
+        '</div>';
+      wireTabs();
+      el.querySelector('#arSearch').oninput=function(){ fSearch=this.value; renderRows(); };
+      el.querySelector('#arFiltro').onchange=function(){ fFiltro=this.value; renderRows(); };
+      renderRows();
+    }
+
+    function pasa(d){
+      if(fFiltro==='sin' && d.clase) return false;
+      if(['producto','servicio','aprovechado','transporte'].indexOf(fFiltro)>=0 && d.clase!==fFiltro) return false;
+      if(fSearch){ var q=fSearch.toLowerCase(); if(((d.desc||'')+' '+(d.cod||'')).toLowerCase().indexOf(q)<0) return false; }
+      return true;
+    }
+    function chip(label,k,cod,on){
+      var st = on ? 'background:#15803D;border:1px solid #15803D;color:#fff' : 'background:#fff;border:1px solid var(--line,#E0E0DA);color:var(--muted,#6E7A77)';
+      return '<button data-cls="'+k+'" data-cod="'+esc(cod)+'" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:'+(puedeEditar?'pointer':'default')+';'+st+'">'+label+'</button>';
+    }
+    function subchip(label,k,cod,on){
+      var st = on ? 'background:#15803D;border:1px solid #15803D;color:#fff' : 'background:#fff;border:1px solid var(--line,#E0E0DA);color:var(--muted,#6E7A77)';
+      return '<button data-sub="'+k+'" data-cod="'+esc(cod)+'" style="font-size:11.5px;padding:4px 10px;border-radius:999px;cursor:pointer;'+st+'">'+label+'</button>';
+    }
+    function fila(d){
+      var clases=[['producto','Producto'],['servicio','Servicio'],['aprovechado','Aprovechado'],['transporte','Transporte']];
+      var sub='';
+      if(d.clase==='servicio'){
+        sub='<div style="margin-top:9px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:#6E7A77">Tipo:</span>'+
+          subchip('Disposicion RCD','disposicion',d.cod,d.sub==='disposicion')+
+          subchip('Generacion RCD','generacion',d.cod,d.sub==='generacion')+'</div>';
+      }
+      return '<div style="background:#fff;border:1px solid var(--line,#E0E0DA);border-radius:8px;padding:11px 13px;margin-bottom:8px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
+            '<div style="min-width:0"><b>'+esc(d.desc)+'</b><br><span class="mono" style="font-size:12px;color:#6E7A77">'+esc(d.cod)+'</span></div>'+
+            '<div style="display:flex;gap:6px;flex-wrap:wrap">'+clases.map(function(c){return chip(c[1],c[0],d.cod,d.clase===c[0]);}).join('')+'</div>'+
+          '</div>'+ sub +
+        '</div>';
+    }
+    function renderRows(){
+      var cont=el.querySelector('#arRows');
+      var done=DATA.filter(function(d){return d.clase;}).length;
+      var cEl=el.querySelector('#arCount'); if(cEl) cEl.textContent=DATA.length+' articulos \u00b7 '+done+' clasificados';
+      var vis=DATA.filter(pasa);
+      if(!vis.length){ cont.innerHTML='<div class="empty">Sin resultados.</div>'; return; }
+      cont.innerHTML=vis.map(fila).join('');
+      cont.querySelectorAll('[data-cls]').forEach(function(b){ b.onclick=function(){ setClase(b.dataset.cod,b.dataset.cls); }; });
+      cont.querySelectorAll('[data-sub]').forEach(function(b){ b.onclick=function(){ setSub(b.dataset.cod,b.dataset.sub); }; });
+    }
+    async function guardar(d){
+      try{
+        var res=scalar(await ctx.rpc('rcd_articulo_clasif_guardar',{
+          p_gestor_id:ctx.ses.gestor_id, p_usuario_id:ctx.ses.id,
+          p_cod_articulo:d.cod, p_descripcion:d.desc, p_clase:d.clase||'', p_servicio_subtipo:d.sub||''
+        }));
+        if(res!=='OK'){ ctx.toast('No se pudo guardar.','error'); return false; }
+        return true;
+      }catch(e){ ctx.toast('Error de conexion al guardar.','error'); return false; }
+    }
+    async function setClase(cod,k){
+      if(!puedeEditar){ ctx.toast('No tienes permiso para clasificar.','error'); return; }
+      var d=DATA.find(function(x){return x.cod===cod;}); if(!d) return;
+      var pc=d.clase, ps=d.sub;
+      d.clase=(d.clase===k)?'':k;
+      if(d.clase!=='servicio') d.sub='';
+      if(!(await guardar(d))){ d.clase=pc; d.sub=ps; }
+      renderRows();
+    }
+    async function setSub(cod,k){
+      var d=DATA.find(function(x){return x.cod===cod;}); if(!d||d.clase!=='servicio') return;
+      var ps=d.sub; d.sub=(d.sub===k)?'':k;
+      if(!(await guardar(d))){ d.sub=ps; }
+      renderRows();
+    }
   }
 
   // ===================== ITEMS =====================
