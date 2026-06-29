@@ -118,11 +118,12 @@ module.exports = async (req, res) => {
       const raw = (Array.isArray(j2.data) ? j2.data : []);
       const lista = raw.map(x => ({
         codigo: x.codigo, descripcion: x.descripcion, iva: x.porcentajeIva,
-        // best-effort: tomamos el precio sea cual sea el nombre que use TNS
-        precio: x.precio ?? x.precioVenta ?? x.valorUnitario ?? x.valorVenta ?? x.valor ?? null
+        lista_precios_txt: x.listaPreciosString || '',
+        lista_precios: x.listaPrecios || null,
+        costo_promedio: (x.costoPromedio != null ? x.costoPromedio : null),
+        ultimo_costo: (x.ultimoCosto != null ? x.ultimoCosto : null)
       })).filter(x => x.codigo);
-      // campos: nombres de columnas que TNS devuelve (para identificar el de precio)
-      res.status(200).json({ok:true, materiales: lista, campos: Object.keys(raw[0]||{})}); return;
+      res.status(200).json({ok:true, materiales: lista}); return;
     }
 
     // ---- Traer clientes de TNS (Tercero/Listar) ----
