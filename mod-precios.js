@@ -56,7 +56,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
 
     const DATA = arts.map(function(a){
       const c=map[a.codigo]||{};
-      return { cod:a.codigo, desc:a.descripcion||'(sin descripcion)', preciosTxt:a.lista_precios_txt||'', preciosJson:a.lista_precios_json||'', clase:c.clase||'', sub:c.servicio_subtipo||'' };
+      return { cod:a.codigo, desc:a.descripcion||'(sin descripcion)', precio:(a.precio!=null?a.precio:0), clase:c.clase||'', sub:c.servicio_subtipo||'' };
     }).filter(function(d){ return d.cod; });
     let fSearch='', fFiltro='todos';
     const syncTxt='TNS sincronizado \u00b7 '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
@@ -73,7 +73,6 @@ window.RCD_MODULOS.precios = function(el, ctx){
           '<p class="lead" style="margin:4px 0 0">Los articulos se crean en TNS. Marca que es cada uno (una sola clase). Los precios son de TNS.</p></div>'+
           '<span style="display:inline-flex;align-items:center;gap:7px;background:#E6F4EA;color:#15803D;font-size:12px;padding:6px 11px;border-radius:8px"><span style="width:8px;height:8px;border-radius:50%;background:#15803D"></span>'+esc(syncTxt)+'</span>'+
         '</div>'+
-        '<div style="font-size:11px;color:#6E7A77;margin:8px 0 0;padding:8px;background:#F4F6EF;border-radius:6px"><b>Diagnostico:</b> abajo de cada articulo aparece el contenido de "listaPrecios" de TNS. Mandame la captura para ver si ahi vienen los precios de venta.</div>'+
         '<div style="display:flex;gap:8px;align-items:center;margin:10px 0 8px;flex-wrap:wrap">'+
           '<input id="arSearch" placeholder="Buscar por descripcion o codigo..." style="flex:1;min-width:180px">'+
           '<select id="arFiltro" style="width:auto">'+
@@ -117,8 +116,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
       return '<div style="background:#fff;border:1px solid var(--line,#E0E0DA);border-radius:8px;padding:11px 13px;margin-bottom:8px">'+
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
             '<div style="min-width:0"><b>'+esc(d.desc)+'</b><br><span class="mono" style="font-size:12px;color:#6E7A77">'+esc(d.cod)+'</span>'+
-            (d.preciosTxt?'<br><span style="font-size:11px;color:#0F766E">Precios: '+esc(d.preciosTxt)+'</span>':'')+
-            (d.preciosJson?'<br><span style="font-size:10.5px;color:#9C0F9C;word-break:break-all">listaPrecios: '+esc(d.preciosJson)+'</span>':'<br><span style="font-size:10.5px;color:#9C0F9C">listaPrecios: vacio</span>')+
+            (d.precio>0?'<br><span style="font-size:11.5px;color:#0F766E">Precio cliente (TNS): $'+Number(d.precio).toLocaleString('es-CO')+'</span>':'<br><span style="font-size:11px;color:#9aa3a0">Sin precio en TNS</span>')+
           '</div>'+
             '<div style="display:flex;gap:6px;flex-wrap:wrap">'+clases.map(function(c){return chip(c[1],c[0],d.cod,d.clase===c[0]);}).join('')+'</div>'+
           '</div>'+ sub +
