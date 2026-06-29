@@ -116,11 +116,15 @@ module.exports = async (req, res) => {
         res.status(200).json({ok:false, error: (j2 && j2.message) || ('HTTP '+(r2 ? r2.status : '?')) }); return;
       }
       const raw = (Array.isArray(j2.data) ? j2.data : []);
-      const lista = raw.map(x => ({
-        codigo: x.codigo, descripcion: x.descripcion, iva: x.porcentajeIva,
-        lista_precios_txt: x.listaPreciosString || '',
-        lista_precios_json: (x.listaPrecios ? JSON.stringify(x.listaPrecios) : '')
-      })).filter(x => x.codigo);
+      const lista = raw.map(x => {
+        const lp = Array.isArray(x.listaPrecios) ? x.listaPrecios : [];
+        const l1 = lp.find(p => String(p.codigo) === '1') || lp[0] || null;
+        return {
+          codigo: x.codigo, descripcion: x.descripcion, iva: x.porcentajeIva,
+          precio: l1 ? (parseFloat(l1.precioDetallado) || 0) : 0,
+          precio_mayor: l1 ? (parseFloat(l1.precioMayor) || 0) : 0
+        };
+      }).filter(x => x.codigo);
       res.status(200).json({ok:true, materiales: lista}); return;
     }
 
