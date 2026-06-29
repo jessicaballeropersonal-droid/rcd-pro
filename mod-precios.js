@@ -13,7 +13,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
   function tabbar(activa){
     return '<div class="tabbar">'+
       '<button class="tab'+(activa==='ar'?' active':'')+'" data-t="ar">Artículos</button>'+
-      '<button class="tab'+(activa==='it'?' active':'')+'" data-t="it">Items (precio global)</button>'+
+      '<button class="tab'+(activa==='it'?' active':'')+'" data-t="it">Productos y servicios</button>'+
       '<button class="tab'+(activa==='mu'?' active':'')+'" data-t="mu">Municipios (transporte)</button>'+
       '</div>';
   }
@@ -223,7 +223,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
       '<div class="mcard" style="max-width:820px">'+
       tabbar('mu')+
       '<h3 style="margin:0 0 4px">Municipios · transporte</h3>'+
-      '<p class="lead">Entra a un municipio para configurar sus tarifas de transporte. (Los municipios y comunas se crean en Parametros.)</p>'+
+      '<p class="lead">Entra a un municipio para configurar sus tarifas de transporte. (Los municipios y zonas se crean en Parametros.)</p>'+
       (MUNIS.length?
         MUNIS.map((m,i)=>'<div class="mcard" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;margin:0 0 8px;cursor:pointer" data-mu="'+i+'">'+
           '<div><b>'+esc(m.nombre)+'</b></div><button class="btn ghost sm">Configurar &rarr;</button></div>').join('')
@@ -236,7 +236,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
   async function muniDetalle(muni){
     el.innerHTML='<div class="loading">Cargando...</div>';
     let comunas=[]; try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:muni.id}); comunas=(Array.isArray(r)?r:[]).filter(c=>c.activa!==false); }catch(e){}
-    if(!comunas.length) comunas=[{id:null,nombre:'(sin comuna/zona)'}];
+    if(!comunas.length) comunas=[{id:null,nombre:'(sin zona)'}];
     let direccion='recoleccion', valor='cliente';
 
     async function pintar(){
@@ -261,7 +261,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
           (pCrear?'<button class="btn primary sm" id="bAddT" style="margin-left:auto">+ Agregar tarifa</button>':'')+
         '</div>';
       if(!tams.length){ h+='<div class="note warn">No hay tamanos de volqueta. Crealos en Parametros.</div></div>'; el.innerHTML=h; wireDet(); return; }
-      h+='<div style="overflow-x:auto"><table class="mtable" style="font-size:12px;min-width:600px"><tr><th rowspan="2" style="vertical-align:bottom">Comuna / Zona</th>'+
+      h+='<div style="overflow-x:auto"><table class="mtable" style="font-size:12px;min-width:600px"><tr><th rowspan="2" style="vertical-align:bottom">Zona</th>'+
         dests.map(d=>'<th colspan="'+ncol+'" style="text-align:center;border-left:2px solid var(--line)">'+esc(d.label)+'</th>').join('')+'</tr><tr>'+
         dests.map(d=>tams.map((t,j)=>'<th style="text-align:right'+(j===0?';border-left:2px solid var(--line)':'')+'">'+esc(t.nombre)+'</th>').join('')).join('')+'</tr>'+
         comunas.map(c=>'<tr><td><b>'+esc(c.nombre)+'</b></td>'+
@@ -298,8 +298,8 @@ window.RCD_MODULOS.precios = function(el, ctx){
         '<button class="btn ghost sm" id="bBackT">&larr; '+esc(muni.nombre)+'</button>'+
         '<h3 style="margin:12px 0 8px">Tarifa de transporte</h3>'+
         '<p class="lead">'+esc(muni.nombre)+' · '+(direccion==='recoleccion'?'Recoleccion':'Entrega')+'</p>'+
-        '<div class="row2"><div class="field"><label>Comuna / Zona</label><select id="t_com">'+
-          (comunas[0]&&comunas[0].id===null?'<option value="">(sin comuna/zona)</option>':'')+
+        '<div class="row2"><div class="field"><label>Zona</label><select id="t_com">'+
+          (comunas[0]&&comunas[0].id===null?'<option value="">(sin zona)</option>':'')+
           comunas.filter(c=>c.id).map(c=>'<option value="'+c.id+'">'+esc(c.nombre)+'</option>').join('')+'</select></div>'+
           '<div class="field"><label>Tamano</label><select id="t_tam">'+tams.map(t=>'<option value="'+t.id+'">'+esc(t.nombre)+'</option>').join('')+'</select></div></div>'+
         '<div class="field"><label>Destino</label><select id="t_dest">'+
