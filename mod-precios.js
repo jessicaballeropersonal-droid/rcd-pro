@@ -161,67 +161,58 @@ window.RCD_MODULOS.precios = function(el, ctx){
 
   // ===================== ITEMS =====================
   async function itemsView(){
-    el.innerHTML='<div class="loading">Cargando...</div>';
-    if(!PRODUCTOS.length){ try{ const r=await ctx.rpc('rcd_productos_lista',{p_gestor_id:ctx.ses.gestor_id}); PRODUCTOS=(Array.isArray(r)?r:[]).filter(p=>p.activo); }catch(e){} }
-    let items=[]; try{ const r=await ctx.rpc('rcd_items_lista',{p_gestor_id:ctx.ses.gestor_id}); items=Array.isArray(r)?r:[]; }catch(e){}
+    el.innerHTML='<div class="loading">Trayendo de TNS...</div>';
+    const cfg = scalar(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id})) || {};
+    if(!cfg.tiene_credenciales){
+      el.innerHTML='<div class="mcard" style="max-width:820px">'+tabbar('it')+'<div class="note warn">Conecta TNS en Facturacion -> Configuracion.</div></div>';
+      wireTabs(); return;
+    }
+    let tns=null;
+    try{
+      tns = await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accion:'traer_materiales',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00'})}).then(x=>x.json());
+    }catch(e){ tns={ok:false}; }
+    if(!(tns&&tns.ok)){
+      el.innerHTML='<div class="mcard" style="max-width:820px">'+tabbar('it')+'<div class="note warn">No se pudo traer de TNS.</div></div>';
+      wireTabs(); return;
+    }
+    const precioDe={}; (tns.materiales||[]).forEach(function(m){ precioDe[m.codigo]=(m.precio!=null?m.precio:0); });
+    let clasif=[]; try{ const ss=await ctx.rpc('rcd_articulos_clasif_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(ss)) clasif=ss; }catch(e){}
+    const grupos={ producto:[], servicio:[], aprovechado:[] };
+    clasif.forEach(function(c){
+      if(grupos[c.clase]){
+        grupos[c.clase].push({ cod:c.cod_articulo, desc:c.descripcion||'(sin descripcion)', sub:c.servicio_subtipo||'', precio:(precioDe[c.cod_articulo]!=null?precioDe[c.cod_articulo]:0) });
+      }
+    });
+    const syncTxt='TNS sincronizado \u00b7 '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    const total=grupos.producto.length+grupos.servicio.length+grupos.aprovechado.length;
+    function subLabel(x){ return x==='disposicion'?'Disposicion RCD':(x==='generacion'?'Generacion RCD':''); }
+    function grupoHtml(k,label){
+      const arr=grupos[k];
+      const rows = arr.length ? arr.map(function(it){
+        const right = it.precio>0
+          ? '<span class="mono" style="color:#0F6E56;font-weight:600">$'+Number(it.precio).toLocaleString('es-CO')+' /t</span>'
+          : '<span style="font-size:11.5px;color:#993C1D;background:#FAECE7;padding:3px 8px;border-radius:6px">Sin precio en TNS</span>';
+        const sub = it.sub?'<span style="font-size:11px;color:#9aa3a0"> \u00b7 '+subLabel(it.sub)+'</span>':'';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff;border:1px solid var(--line,#E0E0DA);border-radius:8px;padding:9px 12px;margin-bottom:6px">'+
+            '<div style="min-width:0"><div style="font-size:13.5px">'+esc(it.desc)+sub+'</div><span class="mono" style="font-size:11px;color:#6E7A77">'+esc(it.cod)+'</span></div>'+
+            right+'</div>';
+      }).join('') : '<div class="empty" style="padding:8px 0">Sin articulos en esta clase.</div>';
+      return '<div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px"><span style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#0F766E">'+label+'</span><span style="font-size:11px;color:#9aa3a0">'+arr.length+'</span></div>'+rows;
+    }
     el.innerHTML=
       '<div class="mcard" style="max-width:820px">'+
       tabbar('it')+
-      '<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Items · precio por tonelada</h3>'+
-        (pCrear?'<button class="btn primary sm" id="bNew">+ Nuevo item</button>':'')+'</div>'+
-      '<p class="lead" style="margin:6px 0 12px">El precio es el mismo en todos los municipios. Marca si lleva transporte.</p>'+
-      (items.length?
-        '<table class="mtable"><tr><th>Item</th><th>Clase</th><th>Transporte</th><th style="text-align:right">Precio (t)</th><th></th></tr>'+
-        items.map((it,i)=>'<tr><td><b>'+esc(it.nombre)+'</b>'+(it.producto_nombre?'<br><span style="font-size:11px;color:var(--muted)">'+esc(it.producto_nombre)+'</span>':'')+'</td>'+
-          '<td><span class="badge off">'+(it.clase==='producto'?'Producto':'Servicio')+'</span></td>'+
-          '<td>'+(it.lleva_transporte?'<span class="badge ok">Si</span>':'<span class="badge off">No</span>')+'</td>'+
-          '<td class="mono" style="text-align:right">'+money(it.precio_t)+'</td>'+
-          '<td><div class="rowbtns">'+(pCrear?'<button class="btn ghost sm" data-ed="'+i+'">Editar</button>':'')+(pEliminar?'<button class="btn ghost sm" data-an="'+i+'">Eliminar</button>':'')+'</div></td></tr>').join('')+'</table>'
-        : '<div class="empty">Aun no hay items.</div>')+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
+        '<div><h3 style="margin:0">Items \u00b7 precio de TNS</h3>'+
+        '<p class="lead" style="margin:4px 0 0">Los articulos y precios vienen de TNS. Aca solo se consultan.</p></div>'+
+        '<span style="display:inline-flex;align-items:center;gap:7px;background:#E6F4EA;color:#15803D;font-size:12px;padding:6px 11px;border-radius:8px"><span style="width:8px;height:8px;border-radius:50%;background:#15803D"></span>'+esc(syncTxt)+'</span>'+
+      '</div>'+
+      (total? grupoHtml('producto','Producto')+grupoHtml('servicio','Servicio')+grupoHtml('aprovechado','Aprovechado')
+        : '<div class="empty" style="margin-top:12px">No hay articulos clasificados como producto/servicio/aprovechado. Clasificalos en la pestana Articulos.</div>')+
+      '<div class="note" style="margin-top:10px">El transporte no va aca: se gestiona en la pestana Municipios.</div>'+
       '</div>';
     wireTabs();
-    const b=el.querySelector('#bNew'); if(b) b.onclick=()=>itemForm(null);
-    items.forEach((it,i)=>{ const e=el.querySelector('[data-ed="'+i+'"]'); if(e) e.onclick=()=>itemForm(it);
-      const a=el.querySelector('[data-an="'+i+'"]'); if(a) a.onclick=()=>itemAnular(it); });
-  }
-  function itemForm(it){
-    const nuevo=!it;
-    el.innerHTML=
-      '<div class="mcard" style="max-width:560px">'+
-      '<button class="btn ghost sm" id="bBack">&larr; Items</button>'+
-      '<h3 style="margin:12px 0 8px">'+(nuevo?'Nuevo item':'Editar item')+'</h3>'+
-      '<div class="field"><label>Nombre</label><input id="i_nom" value="'+(nuevo?'':esc(it.nombre))+'"></div>'+
-      '<div class="row2"><div class="field"><label>Clase</label><select id="i_clase"><option value="servicio">Servicio</option><option value="producto">Producto</option></select></div>'+
-        '<div class="field"><label>Precio (t)</label><input id="i_precio" class="cellnum" value="'+(nuevo?'':numEs(it.precio_t))+'"></div></div>'+
-      '<div class="field" id="i_prodwrap" style="display:none"><label>Producto</label><select id="i_prod"><option value="">Selecciona...</option>'+
-        PRODUCTOS.map(p=>'<option value="'+p.id+'">'+esc(p.nombre)+'</option>').join('')+'</select></div>'+
-      '<div class="chk"><input type="checkbox" id="i_transp" style="width:auto"> <label for="i_transp" style="margin:0;text-transform:none;letter-spacing:0;font-family:inherit;font-size:13px;color:var(--ink)">Lleva transporte (define tarifas de transporte por municipio)</label></div>'+
-      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>'+
-      '</div>';
-    const selClase=el.querySelector('#i_clase'), prodWrap=el.querySelector('#i_prodwrap');
-    function tog(){ prodWrap.style.display=selClase.value==='producto'?'':'none'; }
-    selClase.onchange=tog;
-    if(!nuevo){ selClase.value=it.clase; if(it.producto_id){ el.querySelector('#i_prod').value=it.producto_id; } el.querySelector('#i_transp').checked=!!it.lleva_transporte; }
-    tog();
-    el.querySelector('#bBack').onclick=itemsView; el.querySelector('#bCancel').onclick=itemsView;
-    el.querySelector('#bSave').onclick=async function(){
-      const btn=this, nom=v(el,'i_nom').trim();
-      if(!nom){ ctx.toast('Escribe el nombre.','error'); return; }
-      btn.disabled=true; btn.textContent='Guardando...';
-      try{ const r=scalar(await ctx.rpc('rcd_item_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:nuevo?null:it.id,
-          p_nombre:nom, p_clase:selClase.value, p_producto_id:selClase.value==='producto'?(v(el,'i_prod')||null):null,
-          p_lleva_transporte:el.querySelector('#i_transp').checked, p_precio_t:parseNum(v(el,'i_precio'))}));
-        if(r==='OK'){ ctx.toast('Item guardado'); itemsView(); return; }
-        ctx.toast(r==='SIN_NOMBRE'?'Escribe el nombre.':(r==='CLASE_INVALIDA'?'Clase invalida.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.')),'error');
-      }catch(e){ ctx.toast('Error de conexion.','error'); }
-      btn.disabled=false; btn.textContent='Guardar';
-    };
-  }
-  async function itemAnular(it){
-    if(!(await ctx.confirm('Eliminar el item "'+(it.nombre||'')+'"?'))) return;
-    try{ const r=scalar(await ctx.rpc('rcd_item_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:it.id}));
-      if(r==='OK'){ ctx.toast('Item eliminado'); itemsView(); return; } ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo.','error');
-    }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
   // ===================== MUNICIPIOS =====================
