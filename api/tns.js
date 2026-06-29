@@ -119,9 +119,7 @@ module.exports = async (req, res) => {
       const lista = raw.map(x => ({
         codigo: x.codigo, descripcion: x.descripcion, iva: x.porcentajeIva,
         lista_precios_txt: x.listaPreciosString || '',
-        lista_precios: x.listaPrecios || null,
-        costo_promedio: (x.costoPromedio != null ? x.costoPromedio : null),
-        ultimo_costo: (x.ultimoCosto != null ? x.ultimoCosto : null)
+        lista_precios_json: (x.listaPrecios ? JSON.stringify(x.listaPrecios) : '')
       })).filter(x => x.codigo);
       res.status(200).json({ok:true, materiales: lista}); return;
     }
