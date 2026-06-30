@@ -612,8 +612,8 @@ async function municipios(body, ctx){
       '<p class="lead">Cada municipio tiene sus metas de aprovechamiento y sus zonas. Las tarifas de transporte van en el siguiente paso.</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Agregar municipio</button></div>':'')+
       (lista.length?
-        '<table class="mtable"><tr><th>Municipio</th><th>Zonas</th><th style="text-align:right">Meta vigente</th><th>Estado</th><th></th></tr>'+
-        lista.map((m,i)=>'<tr><td><b>'+esc(m.nombre)+'</b></td><td class="mono">'+m.n_comunas+'</td>'+
+        '<table class="mtable"><tr><th>Municipio</th><th>Sigla</th><th>Zonas</th><th style="text-align:right">Meta vigente</th><th>Estado</th><th></th></tr>'+
+        lista.map((m,i)=>'<tr><td><b>'+esc(m.nombre)+'</b></td><td class="mono">'+(m.sigla?esc(m.sigla):'<span style="color:#993C1D">sin sigla</span>')+'</td><td class="mono">'+m.n_comunas+'</td>'+
           '<td style="text-align:right" class="mono">'+(m.meta_vigente==null?'<span style="color:#C9C9C1">sin meta</span>':numEs(m.meta_vigente)+'%')+'</td>'+
           '<td><span class="badge '+(m.activo?'ok':'off')+'">'+(m.activo?'Activo':'Inactivo')+'</span></td>'+
           '<td><div class="rowbtns"><button class="btn ghost sm" data-open="'+i+'">Gestionar</button>'+
@@ -632,6 +632,7 @@ async function municipios(body, ctx){
     body.innerHTML=
       '<h3 style="margin-top:0">'+(esNuevo?'Nuevo municipio':'Editar municipio')+'</h3>'+
       '<div class="field"><label>Nombre</label><input id="m_nombre" value="'+(esNuevo?'':esc(m.nombre))+'"></div>'+
+      '<div class="field"><label>Sigla (para el codigo de transporte en TNS, ej: cuc)</label><input id="m_sigla" value="'+(esNuevo?'':esc(m.sigla||''))+'" placeholder="cuc"></div>'+
       (esNuevo?'':'<div class="field"><label>Estado</label><select id="m_activo"><option value="true"'+(m.activo?' selected':'')+'>Activo</option><option value="false"'+(!m.activo?' selected':'')+'>Inactivo</option></select></div>')+
       '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>';
     body.querySelector('#bCancel').onclick=listaMun;
@@ -639,7 +640,7 @@ async function municipios(body, ctx){
       const btn=this, nombre=v(body,'m_nombre'); if(!nombre){ ctx.toast('Escribe el nombre.','error'); return; }
       const activo=esNuevo?true:(body.querySelector('#m_activo').value==='true');
       btn.disabled=true; btn.textContent='Guardando...';
-      try{ const r=scalar(await ctx.rpc('rcd_municipio_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNuevo?null:m.id,p_nombre:nombre,p_activo:activo}));
+      try{ const r=scalar(await ctx.rpc('rcd_municipio_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNuevo?null:m.id,p_nombre:nombre,p_activo:activo,p_sigla:v(body,'m_sigla')}));
         if(r==='OK'){ ctx.toast('Municipio guardado'); listaMun(); return; }
         ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.','error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
@@ -729,8 +730,8 @@ async function municipios(body, ctx){
       '<div style="display:flex;align-items:center;gap:10px"><b>Zonas</b>'+
         (pCrear?'<button class="btn ghost sm" id="bNuevaComuna" style="margin-left:auto">+ Zona</button>':'')+'</div>'+
       (lista.length?
-        '<table class="mtable"><tr><th>Zona</th><th>Estado</th><th></th></tr>'+
-        lista.map((c,i)=>'<tr><td><b>'+esc(c.nombre)+'</b></td>'+
+        '<table class="mtable"><tr><th>Zona</th><th>Sigla</th><th>Estado</th><th></th></tr>'+
+        lista.map((c,i)=>'<tr><td><b>'+esc(c.nombre)+'</b></td><td class="mono">'+(c.sigla?esc(c.sigla):'<span style="color:#993C1D">sin</span>')+'</td>'+
           '<td><span class="badge '+(c.activa?'ok':'off')+'">'+(c.activa?'Activa':'Inactiva')+'</span></td>'+
           '<td><div class="rowbtns">'+
             '<button class="btn ghost sm" data-tcom="'+i+'">Tarifas</button>'+
@@ -749,14 +750,18 @@ async function municipios(body, ctx){
     cont.innerHTML=
       '<b>'+(esNueva?'Nueva zona':'Editar zona')+'</b>'+
       '<div class="field" style="margin-top:8px"><label>Nombre</label><input id="c_nombre" value="'+(esNueva?'':esc(c.nombre))+'"></div>'+
+      '<div class="field"><label>Sigla (ej: z1)</label><input id="c_sigla" value="'+(esNueva?'':esc(c.sigla||''))+'" placeholder="z1"></div>'+
+      '<div class="note" id="c_prev" style="margin-top:0"></div>'+
       (esNueva?'':'<div class="field"><label>Estado</label><select id="c_activa"><option value="true"'+(c.activa?' selected':'')+'>Activa</option><option value="false"'+(!c.activa?' selected':'')+'>Inactiva</option></select></div>')+
       '<div style="display:flex;gap:10px"><button class="btn ghost" id="bC2">Cancelar</button><button class="btn primary" id="bS2">Guardar</button></div>';
     cont.querySelector('#bC2').onclick=()=>comunas(m);
+    const _prev=()=>{ const sg=(v(cont,'c_sigla')||'[sigla]').toLowerCase(); const pe=cont.querySelector('#c_prev'); if(pe) pe.innerHTML='Codigo de transporte: <b class="mono">'+esc(m.sigla||'(sigla-muni)')+'-'+esc(sg)+'-t7-mer</b> &middot; ejemplo con 7t y aliado Mercedes'; };
+    const _si=cont.querySelector('#c_sigla'); if(_si){ _si.addEventListener('input',_prev); _prev(); }
     cont.querySelector('#bS2').onclick=async function(){
       const btn=this, nombre=v(cont,'c_nombre'); if(!nombre){ ctx.toast('Escribe el nombre.','error'); return; }
       const activa=esNueva?true:(cont.querySelector('#c_activa').value==='true');
       btn.disabled=true; btn.textContent='Guardando...';
-      try{ const r=scalar(await ctx.rpc('rcd_comuna_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNueva?null:c.id,p_municipio_id:m.id,p_nombre:nombre,p_activa:activa}));
+      try{ const r=scalar(await ctx.rpc('rcd_comuna_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNueva?null:c.id,p_municipio_id:m.id,p_nombre:nombre,p_activa:activa,p_sigla:v(cont,'c_sigla')}));
         if(r==='OK'){ ctx.toast('Zona guardada'); comunas(m); return; }
         ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.','error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
