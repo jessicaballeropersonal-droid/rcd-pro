@@ -609,10 +609,10 @@ async function municipios(body, ctx){
     let lista=[]; try{ const r=await ctx.rpc('rcd_municipios_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
     body.innerHTML=
       '<h3 style="margin-top:0">Municipios</h3>'+
-      '<p class="lead">Cada municipio tiene sus metas de aprovechamiento y sus comunas. Las tarifas de transporte van en el siguiente paso.</p>'+
+      '<p class="lead">Cada municipio tiene sus metas de aprovechamiento y sus zonas. Las tarifas de transporte van en el siguiente paso.</p>'+
       (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Agregar municipio</button></div>':'')+
       (lista.length?
-        '<table class="mtable"><tr><th>Municipio</th><th>Comunas</th><th style="text-align:right">Meta vigente</th><th>Estado</th><th></th></tr>'+
+        '<table class="mtable"><tr><th>Municipio</th><th>Zonas</th><th style="text-align:right">Meta vigente</th><th>Estado</th><th></th></tr>'+
         lista.map((m,i)=>'<tr><td><b>'+esc(m.nombre)+'</b></td><td class="mono">'+m.n_comunas+'</td>'+
           '<td style="text-align:right" class="mono">'+(m.meta_vigente==null?'<span style="color:#C9C9C1">sin meta</span>':numEs(m.meta_vigente)+'%')+'</td>'+
           '<td><span class="badge '+(m.activo?'ok':'off')+'">'+(m.activo?'Activo':'Inactivo')+'</span></td>'+
@@ -723,13 +723,13 @@ async function municipios(body, ctx){
   // ----- COMUNAS -----
   async function comunas(m){
     const cont=body.querySelector('#secComunas');
-    cont.innerHTML='<div class="loading">Cargando comunas...</div>';
+    cont.innerHTML='<div class="loading">Cargando zonas...</div>';
     let lista=[]; try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:m.id}); if(Array.isArray(r)) lista=r; }catch(e){}
     cont.innerHTML=
-      '<div style="display:flex;align-items:center;gap:10px"><b>Comunas / zonas</b>'+
-        (pCrear?'<button class="btn ghost sm" id="bNuevaComuna" style="margin-left:auto">+ Comuna</button>':'')+'</div>'+
+      '<div style="display:flex;align-items:center;gap:10px"><b>Zonas</b>'+
+        (pCrear?'<button class="btn ghost sm" id="bNuevaComuna" style="margin-left:auto">+ Zona</button>':'')+'</div>'+
       (lista.length?
-        '<table class="mtable"><tr><th>Comuna</th><th>Estado</th><th></th></tr>'+
+        '<table class="mtable"><tr><th>Zona</th><th>Estado</th><th></th></tr>'+
         lista.map((c,i)=>'<tr><td><b>'+esc(c.nombre)+'</b></td>'+
           '<td><span class="badge '+(c.activa?'ok':'off')+'">'+(c.activa?'Activa':'Inactiva')+'</span></td>'+
           '<td><div class="rowbtns">'+
@@ -737,7 +737,7 @@ async function municipios(body, ctx){
             (pEditar?'<button class="btn ghost sm" data-ecom="'+i+'">Editar</button>':'')+
             (pEliminar?'<button class="btn ghost sm" data-acom="'+i+'">Anular</button>':'')+
           '</div></td></tr>').join('')+'</table>'
-        : '<div class="empty">Sin comunas.</div>');
+        : '<div class="empty">Sin zonas.</div>');
     if(pCrear) cont.querySelector('#bNuevaComuna').onclick=()=>formComuna(m,null,cont);
     cont.querySelectorAll('[data-tcom]').forEach(b=>{const i=+b.dataset.tcom; b.onclick=()=>tarifasComuna(m,lista[i]);});
     cont.querySelectorAll('[data-ecom]').forEach(b=>{const i=+b.dataset.ecom; b.onclick=()=>formComuna(m,lista[i],cont);});
@@ -747,7 +747,7 @@ async function municipios(body, ctx){
   function formComuna(m,c,cont){
     const esNueva=!c;
     cont.innerHTML=
-      '<b>'+(esNueva?'Nueva comuna':'Editar comuna')+'</b>'+
+      '<b>'+(esNueva?'Nueva zona':'Editar zona')+'</b>'+
       '<div class="field" style="margin-top:8px"><label>Nombre</label><input id="c_nombre" value="'+(esNueva?'':esc(c.nombre))+'"></div>'+
       (esNueva?'':'<div class="field"><label>Estado</label><select id="c_activa"><option value="true"'+(c.activa?' selected':'')+'>Activa</option><option value="false"'+(!c.activa?' selected':'')+'>Inactiva</option></select></div>')+
       '<div style="display:flex;gap:10px"><button class="btn ghost" id="bC2">Cancelar</button><button class="btn primary" id="bS2">Guardar</button></div>';
@@ -757,7 +757,7 @@ async function municipios(body, ctx){
       const activa=esNueva?true:(cont.querySelector('#c_activa').value==='true');
       btn.disabled=true; btn.textContent='Guardando...';
       try{ const r=scalar(await ctx.rpc('rcd_comuna_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNueva?null:c.id,p_municipio_id:m.id,p_nombre:nombre,p_activa:activa}));
-        if(r==='OK'){ ctx.toast('Comuna guardada'); comunas(m); return; }
+        if(r==='OK'){ ctx.toast('Zona guardada'); comunas(m); return; }
         ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.','error');
       }catch(e){ ctx.toast('Error de conexion.','error'); }
       btn.disabled=false; btn.textContent='Guardar';
@@ -767,7 +767,7 @@ async function municipios(body, ctx){
   async function anularComuna(m,c){
     if(!(await ctx.confirm('Anular la comuna "'+c.nombre+'"? Se ocultara, pero el historico queda.'))) return;
     try{ const r=scalar(await ctx.rpc('rcd_comuna_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:c.id}));
-      if(r==='OK'){ ctx.toast('Comuna anulada'); comunas(m); return; }
+      if(r==='OK'){ ctx.toast('Zona anulada'); comunas(m); return; }
       ctx.toast(r==='TIENE_OBRAS'?'No se puede anular: tiene obras asociadas.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.'),'error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
@@ -780,14 +780,14 @@ async function municipios(body, ctx){
     let lista=[]; try{ const r=await ctx.rpc('rcd_tarifas_comuna',{p_gestor_id:ctx.ses.gestor_id, p_comuna_id:c.id}); if(Array.isArray(r)) lista=r; }catch(e){}
 
     if(!lista.length){
-      cont.innerHTML='<button class="btn ghost sm" id="bBackT">&larr; Comunas</button>'+
+      cont.innerHTML='<button class="btn ghost sm" id="bBackT">&larr; Zonas</button>'+
         '<h4 style="margin:12px 0 6px">Tarifas - '+esc(c.nombre)+'</h4>'+
         '<div class="note warn">Primero crea tamanos de volqueta en la pestana Volquetas.</div>';
       cont.querySelector('#bBackT').onclick=()=>comunas(m); return;
     }
 
     cont.innerHTML=
-      '<button class="btn ghost sm" id="bBackT">&larr; Comunas</button>'+
+      '<button class="btn ghost sm" id="bBackT">&larr; Zonas</button>'+
       '<h4 style="margin:12px 0 2px">Tarifas de transporte - '+esc(c.nombre)+'</h4>'+
       '<p class="lead">Cobro a la constructora y pago al volquetero, por tamano. El margen es informativo (cobro - pago).</p>'+
       '<table class="mtable"><tr><th>Tamano</th><th style="text-align:right">Cobro</th><th style="text-align:right">Pago</th><th style="text-align:right">Margen</th></tr>'+
