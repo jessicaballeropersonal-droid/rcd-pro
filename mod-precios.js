@@ -219,20 +219,186 @@ window.RCD_MODULOS.precios = function(el, ctx){
   async function muniList(){
     el.innerHTML='<div class="loading">Cargando...</div>';
     await cargarCat();
-    el.innerHTML=
-      '<div class="mcard" style="max-width:820px">'+
-      tabbar('mu')+
-      '<h3 style="margin:0 0 4px">Municipios · transporte</h3>'+
-      '<p class="lead">Entra a un municipio para configurar sus tarifas de transporte. (Los municipios y zonas se crean en Parametros.)</p>'+
-      (MUNIS.length?
-        MUNIS.map((m,i)=>'<div class="mcard" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;margin:0 0 8px;cursor:pointer" data-mu="'+i+'">'+
-          '<div><b>'+esc(m.nombre)+'</b></div><button class="btn ghost sm">Configurar &rarr;</button></div>').join('')
-        : '<div class="empty">No hay municipios. Crealos en Parametros.</div>')+
-      '</div>';
+    el.innerHTML='<div class="mcard" style="max-width:920px">'+tabbar('mu')+'<div id="muBody"></div></div>';
     wireTabs();
-    MUNIS.forEach((m,i)=>{ const c=el.querySelector('[data-mu="'+i+'"]'); if(c) c.onclick=()=>muniDetalle(m); });
-  }
+    const body = el.querySelector('#muBody');
+    const pEditar=ctx.can('parametros','editar'), pEliminar=ctx.can('parametros','eliminar');
 
+    async function listaMun(){
+      body.innerHTML='<div class="loading">Cargando...</div>';
+      let lista=[]; try{ const r=await ctx.rpc('rcd_municipios_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
+      body.innerHTML=
+        '<h3 style="margin-top:0">Transporte \u00b7 municipios y zonas</h3>'+
+        '<p class="lead">Aca se configura lo que arma el precio de cada ruta: municipios, zonas, siglas y metas. Las tarifas van en el boton Tarifas de cada municipio.</p>'+
+        (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Municipio</button></div>':'')+
+        (lista.length?
+          '<table class="mtable"><tr><th>Municipio</th><th>Sigla</th><th>Zonas</th><th style="text-align:right">Meta vigente</th><th>Estado</th><th></th></tr>'+
+          lista.map((m,i)=>'<tr><td><b>'+esc(m.nombre)+'</b></td><td class="mono">'+(m.sigla?esc(m.sigla):'<span style="color:#993C1D">sin sigla</span>')+'</td><td class="mono">'+m.n_comunas+'</td>'+
+            '<td style="text-align:right" class="mono">'+(m.meta_vigente==null?'<span style="color:#C9C9C1">sin meta</span>':numEs(m.meta_vigente)+'%')+'</td>'+
+            '<td><span class="badge '+(m.activo?'ok':'off')+'">'+(m.activo?'Activo':'Inactivo')+'</span></td>'+
+            '<td><div class="rowbtns"><button class="btn ghost sm" data-open="'+i+'">Gestionar</button>'+
+            '<button class="btn ghost sm" data-tar="'+i+'">Tarifas</button>'+
+            (pEditar?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
+            (pEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'')+
+            '</div></td></tr>').join('')+'</table>'
+          : '<div class="empty">Aun no hay municipios.</div>');
+      if(pCrear) body.querySelector('#bNuevo').onclick=()=>formMun(null);
+      body.querySelectorAll('[data-open]').forEach(b=>{const i=+b.dataset.open; b.onclick=()=>detalle(lista[i]);});
+      body.querySelectorAll('[data-tar]').forEach(b=>{const i=+b.dataset.tar; b.onclick=()=>muniDetalle(lista[i]);});
+      body.querySelectorAll('[data-edit]').forEach(b=>{const i=+b.dataset.edit; b.onclick=()=>formMun(lista[i]);});
+      body.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anularMun(lista[i]);});
+    }
+
+    function formMun(m){
+      const esNuevo=!m;
+      body.innerHTML=
+        '<h3 style="margin-top:0">'+(esNuevo?'Nuevo municipio':'Editar municipio')+'</h3>'+
+        '<div class="field"><label>Nombre</label><input id="m_nombre" value="'+(esNuevo?'':esc(m.nombre))+'"></div>'+
+        '<div class="field"><label>Sigla (para el codigo de transporte en TNS, ej: cuc)</label><input id="m_sigla" value="'+(esNuevo?'':esc(m.sigla||''))+'" placeholder="cuc"></div>'+
+        (esNuevo?'':'<div class="field"><label>Estado</label><select id="m_activo"><option value="true"'+(m.activo?' selected':'')+'>Activo</option><option value="false"'+(!m.activo?' selected':'')+'>Inactivo</option></select></div>')+
+        '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>';
+      body.querySelector('#bCancel').onclick=listaMun;
+      body.querySelector('#bSave').onclick=async function(){
+        const btn=this, nombre=v(body,'m_nombre'); if(!nombre){ ctx.toast('Escribe el nombre.','error'); return; }
+        const activo=esNuevo?true:(body.querySelector('#m_activo').value==='true');
+        btn.disabled=true; btn.textContent='Guardando...';
+        try{ const r=scalar(await ctx.rpc('rcd_municipio_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNuevo?null:m.id,p_nombre:nombre,p_activo:activo,p_sigla:v(body,'m_sigla')}));
+          if(r==='OK'){ ctx.toast('Municipio guardado'); listaMun(); return; }
+          ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.','error');
+        }catch(e){ ctx.toast('Error de conexion.','error'); }
+        btn.disabled=false; btn.textContent='Guardar';
+      };
+    }
+
+    async function anularMun(m){
+      if(!(await ctx.confirm('Anular el municipio "'+m.nombre+'"? Se ocultara, pero el historico queda.'))) return;
+      try{ const r=scalar(await ctx.rpc('rcd_municipio_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:m.id}));
+        if(r==='OK'){ ctx.toast('Municipio anulado'); listaMun(); return; }
+        ctx.toast(r==='TIENE_OBRAS'?'No se puede anular: tiene obras asociadas.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.'),'error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+    }
+
+    // ===== Nivel 2: detalle del municipio (metas + comunas) =====
+    function detalle(m){
+      body.innerHTML=
+        '<button class="btn ghost sm" id="bBack">&larr; Municipios</button>'+
+        '<h3 style="margin:12px 0 2px">'+esc(m.nombre)+'</h3>'+
+        '<div id="secMetas" style="margin-top:14px"></div>'+
+        '<div id="secComunas" style="margin-top:22px"></div>';
+      body.querySelector('#bBack').onclick=listaMun;
+      metas(m); comunas(m);
+    }
+
+    // ----- METAS -----
+    async function metas(m){
+      const cont=body.querySelector('#secMetas');
+      cont.innerHTML='<div class="loading">Cargando metas...</div>';
+      let lista=[]; try{ const r=await ctx.rpc('rcd_metas_lista',{p_municipio_id:m.id}); if(Array.isArray(r)) lista=r; }catch(e){}
+      cont.innerHTML=
+        '<div style="display:flex;align-items:center;gap:10px"><b>Metas de aprovechamiento</b>'+
+          (pCrear?'<button class="btn ghost sm" id="bNuevaMeta" style="margin-left:auto">+ Meta</button>':'')+'</div>'+
+        (lista.length?
+          '<table class="mtable"><tr><th>Desde</th><th>Hasta</th><th style="text-align:right">Meta</th><th></th></tr>'+
+          lista.map((x,i)=>'<tr><td class="mono">'+esc(x.vigencia_desde)+'</td>'+
+            '<td class="mono">'+(x.vigencia_hasta?esc(x.vigencia_hasta):'indefinida')+'</td>'+
+            '<td style="text-align:right" class="mono">'+numEs(x.porcentaje)+'%</td>'+
+            '<td><div class="rowbtns">'+
+              (pEditar?'<button class="btn ghost sm" data-emeta="'+i+'">Editar</button>':'')+
+              (pEliminar?'<button class="btn ghost sm" data-ameta="'+i+'">Anular</button>':'')+
+            '</div></td></tr>').join('')+'</table>'
+          : '<div class="empty">Sin metas. Agrega la vigente.</div>');
+      if(pCrear) cont.querySelector('#bNuevaMeta').onclick=()=>formMeta(m,null,cont);
+      cont.querySelectorAll('[data-emeta]').forEach(b=>{const i=+b.dataset.emeta; b.onclick=()=>formMeta(m,lista[i],cont);});
+      cont.querySelectorAll('[data-ameta]').forEach(b=>{const i=+b.dataset.ameta; b.onclick=()=>anularMeta(m,lista[i]);});
+    }
+
+    function formMeta(m,x,cont){
+      const esNueva=!x;
+      cont.innerHTML=
+        '<b>'+(esNueva?'Nueva meta':'Editar meta')+'</b>'+
+        '<div class="row2" style="margin-top:8px">'+
+          '<div class="field"><label>Vigente desde</label><input type="date" id="me_desde" value="'+(esNueva?'':esc(x.vigencia_desde))+'"></div>'+
+          '<div class="field"><label>Hasta (opcional)</label><input type="date" id="me_hasta" value="'+(esNueva||!x.vigencia_hasta?'':esc(x.vigencia_hasta))+'"></div>'+
+        '</div>'+
+        '<div class="field"><label>Meta de aprovechamiento (%)</label><input id="me_pct" value="'+(esNueva?'':numEs(x.porcentaje))+'"></div>'+
+        '<div style="display:flex;gap:10px"><button class="btn ghost" id="bC">Cancelar</button><button class="btn primary" id="bS">Guardar</button></div>';
+      cont.querySelector('#bC').onclick=()=>metas(m);
+      cont.querySelector('#bS').onclick=async function(){
+        const btn=this, desde=v(cont,'me_desde'), hasta=v(cont,'me_hasta'), pct=parseNum(v(cont,'me_pct'));
+        if(!desde){ ctx.toast('Pon la fecha "desde".','error'); return; }
+        btn.disabled=true; btn.textContent='Guardando...';
+        try{ const r=scalar(await ctx.rpc('rcd_meta_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNueva?null:x.id,p_municipio_id:m.id,p_desde:desde,p_hasta:hasta||null,p_porcentaje:pct}));
+          if(r==='OK'){ ctx.toast('Meta guardada'); metas(m); return; }
+          ctx.toast(r==='RANGO_INVALIDO'?'La fecha "hasta" no puede ser antes de "desde".':(r==='PORCENTAJE_INVALIDO'?'El % debe estar entre 0 y 100.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.')),'error');
+        }catch(e){ ctx.toast('Error de conexion.','error'); }
+        btn.disabled=false; btn.textContent='Guardar';
+      };
+    }
+
+    async function anularMeta(m,x){
+      if(!(await ctx.confirm('Anular esta meta ('+numEs(x.porcentaje)+'%)?'))) return;
+      try{ const r=scalar(await ctx.rpc('rcd_meta_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:x.id}));
+        if(r==='OK'){ ctx.toast('Meta anulada'); metas(m); return; }
+        ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.','error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+    }
+
+    // ----- COMUNAS -----
+    async function comunas(m){
+      const cont=body.querySelector('#secComunas');
+      cont.innerHTML='<div class="loading">Cargando zonas...</div>';
+      let lista=[]; try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:m.id}); if(Array.isArray(r)) lista=r; }catch(e){}
+      cont.innerHTML=
+        '<div style="display:flex;align-items:center;gap:10px"><b>Zonas</b>'+
+          (pCrear?'<button class="btn ghost sm" id="bNuevaComuna" style="margin-left:auto">+ Zona</button>':'')+'</div>'+
+        (lista.length?
+          '<table class="mtable"><tr><th>Zona</th><th>Sigla</th><th>Estado</th><th></th></tr>'+
+          lista.map((c,i)=>'<tr><td><b>'+esc(c.nombre)+'</b></td><td class="mono">'+(c.sigla?esc(c.sigla):'<span style="color:#993C1D">sin</span>')+'</td>'+
+            '<td><span class="badge '+(c.activa?'ok':'off')+'">'+(c.activa?'Activa':'Inactiva')+'</span></td>'+
+            '<td><div class="rowbtns">'+
+                          (pEditar?'<button class="btn ghost sm" data-ecom="'+i+'">Editar</button>':'')+
+              (pEliminar?'<button class="btn ghost sm" data-acom="'+i+'">Anular</button>':'')+
+            '</div></td></tr>').join('')+'</table>'
+          : '<div class="empty">Sin zonas.</div>');
+      if(pCrear) cont.querySelector('#bNuevaComuna').onclick=()=>formComuna(m,null,cont);
+      cont.querySelectorAll('[data-ecom]').forEach(b=>{const i=+b.dataset.ecom; b.onclick=()=>formComuna(m,lista[i],cont);});
+      cont.querySelectorAll('[data-acom]').forEach(b=>{const i=+b.dataset.acom; b.onclick=()=>anularComuna(m,lista[i]);});
+    }
+
+    function formComuna(m,c,cont){
+      const esNueva=!c;
+      cont.innerHTML=
+        '<b>'+(esNueva?'Nueva zona':'Editar zona')+'</b>'+
+        '<div class="field" style="margin-top:8px"><label>Nombre</label><input id="c_nombre" value="'+(esNueva?'':esc(c.nombre))+'"></div>'+
+        '<div class="field"><label>Sigla (ej: z1)</label><input id="c_sigla" value="'+(esNueva?'':esc(c.sigla||''))+'" placeholder="z1"></div>'+
+        '<div class="note" id="c_prev" style="margin-top:0"></div>'+
+        (esNueva?'':'<div class="field"><label>Estado</label><select id="c_activa"><option value="true"'+(c.activa?' selected':'')+'>Activa</option><option value="false"'+(!c.activa?' selected':'')+'>Inactiva</option></select></div>')+
+        '<div style="display:flex;gap:10px"><button class="btn ghost" id="bC2">Cancelar</button><button class="btn primary" id="bS2">Guardar</button></div>';
+      cont.querySelector('#bC2').onclick=()=>comunas(m);
+      const _prev=()=>{ const sg=(v(cont,'c_sigla')||'[sigla]').toLowerCase(); const pe=cont.querySelector('#c_prev'); if(pe) pe.innerHTML='Codigo de transporte: <b class="mono">'+esc(m.sigla||'(sigla-muni)')+'-'+esc(sg)+'-t7-mer</b> &middot; ejemplo con 7t y aliado Mercedes'; };
+      const _si=cont.querySelector('#c_sigla'); if(_si){ _si.addEventListener('input',_prev); _prev(); }
+      cont.querySelector('#bS2').onclick=async function(){
+        const btn=this, nombre=v(cont,'c_nombre'); if(!nombre){ ctx.toast('Escribe el nombre.','error'); return; }
+        const activa=esNueva?true:(cont.querySelector('#c_activa').value==='true');
+        btn.disabled=true; btn.textContent='Guardando...';
+        try{ const r=scalar(await ctx.rpc('rcd_comuna_guardar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:esNueva?null:c.id,p_municipio_id:m.id,p_nombre:nombre,p_activa:activa,p_sigla:v(cont,'c_sigla')}));
+          if(r==='OK'){ ctx.toast('Zona guardada'); comunas(m); return; }
+          ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.','error');
+        }catch(e){ ctx.toast('Error de conexion.','error'); }
+        btn.disabled=false; btn.textContent='Guardar';
+      };
+    }
+
+    async function anularComuna(m,c){
+      if(!(await ctx.confirm('Anular la comuna "'+c.nombre+'"? Se ocultara, pero el historico queda.'))) return;
+      try{ const r=scalar(await ctx.rpc('rcd_comuna_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:c.id}));
+        if(r==='OK'){ ctx.toast('Zona anulada'); comunas(m); return; }
+        ctx.toast(r==='TIENE_OBRAS'?'No se puede anular: tiene obras asociadas.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.'),'error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+    }
+
+    listaMun();
+  }
   async function muniDetalle(muni){
     el.innerHTML='<div class="loading">Cargando...</div>';
     let comunas=[]; try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:muni.id}); comunas=(Array.isArray(r)?r:[]).filter(c=>c.activa!==false); }catch(e){}
