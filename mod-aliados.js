@@ -21,7 +21,6 @@ window.RCD_MODULOS.aliados = function(el, ctx){
       '<div class="mcard" style="max-width:900px">'+
       '<h3 style="margin-top:0">Aliados de maquila</h3>'+
       '<p class="lead">Maquila = otra planta que te procesa el RCD (vuelve a ti). Receptor = quien usa el RCD como materia prima (no vuelve, genera Anexo VI).</p>'+
-      (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Nuevo aliado</button></div>':'')+
       (as.length?
         '<table class="mtable"><tr><th>Aliado</th><th>NIT</th><th>Municipio</th><th>Tipo</th><th style="text-align:right">Maquila $/t</th><th>Estado</th><th></th></tr>'+
         as.map((a,i)=>'<tr><td><b>'+esc(a.razon_social)+'</b></td><td class="mono">'+esc(a.nit||'')+'</td>'+
@@ -34,7 +33,6 @@ window.RCD_MODULOS.aliados = function(el, ctx){
           '</div></td></tr>').join('')+'</table>'
         : '<div class="empty">Aun no hay aliados.</div>')+
       '</div>';
-    if(pCrear) el.querySelector('#bNuevo').onclick=()=>form(null);
     el.querySelectorAll('[data-edit]').forEach(b=>{const i=+b.dataset.edit; b.onclick=()=>form(as[i]);});
     el.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anular(as[i]);});
   }
