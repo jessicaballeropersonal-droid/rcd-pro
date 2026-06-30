@@ -15,7 +15,6 @@ window.RCD_MODULOS.clientes = function(el, ctx){
       '<div class="mcard" style="max-width:900px">'+
       '<h3 style="margin-top:0">Clientes y obras</h3>'+
       '<p class="lead">El cliente (generador) y sus obras. La obra define el regimen (PMA/Cupo) por su area.</p>'+
-      (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Nuevo cliente</button></div>':'')+
       (cs.length?
         '<table class="mtable"><tr><th>Cliente</th><th>NIT</th><th>Obras</th><th>Estado</th><th></th></tr>'+
         cs.map((c,i)=>'<tr><td><b>'+esc(c.razon_social)+'</b></td><td class="mono">'+esc(c.nit||'')+'</td>'+
@@ -27,7 +26,6 @@ window.RCD_MODULOS.clientes = function(el, ctx){
           '</div></td></tr>').join('')+'</table>'
         : '<div class="empty">Aun no hay clientes.</div>')+
       '</div>';
-    if(pCrear) el.querySelector('#bNuevo').onclick=()=>formCliente(null);
     el.querySelectorAll('[data-open]').forEach(b=>{const i=+b.dataset.open; b.onclick=()=>detalle(cs[i]);});
     el.querySelectorAll('[data-edit]').forEach(b=>{const i=+b.dataset.edit; b.onclick=()=>formCliente(cs[i]);});
     el.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anularCliente(cs[i]);});
@@ -127,7 +125,7 @@ window.RCD_MODULOS.clientes = function(el, ctx){
           '<option value="">Selecciona...</option>'+
           muns.map(m=>'<option value="'+m.id+'"'+(!nuevo&&o.municipio_id===m.id?' selected':'')+'>'+esc(m.nombre)+'</option>').join('')+
         '</select></div>'+
-        '<div class="field"><label>Comuna / zona</label><select id="o_com"><option value="">Selecciona municipio primero</option></select></div>'+
+        '<div class="field"><label>Zona</label><select id="o_com"><option value="">Selecciona municipio primero</option></select></div>'+
       '</div>'+
       '<div class="field"><label>Direccion de generacion</label><input id="o_dir" value="'+(nuevo?'':esc(o.direccion||''))+'"></div>'+
       '<div class="row2">'+
@@ -152,7 +150,7 @@ window.RCD_MODULOS.clientes = function(el, ctx){
       const mid=selMun.value;
       if(!mid){ selCom.innerHTML='<option value="">Selecciona municipio primero</option>'; return; }
       let coms=[]; try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:mid}); if(Array.isArray(r)) coms=r; }catch(e){}
-      selCom.innerHTML='<option value="">Sin comuna</option>'+coms.map(cc=>'<option value="'+cc.id+'"'+(preselect&&preselect===cc.id?' selected':'')+'>'+esc(cc.nombre)+'</option>').join('');
+      selCom.innerHTML='<option value="">Sin zona</option>'+coms.map(cc=>'<option value="'+cc.id+'"'+(preselect&&preselect===cc.id?' selected':'')+'>'+esc(cc.nombre)+'</option>').join('');
     }
     function recalcRegimen(){
       const area=parseNum(inpArea.value);
