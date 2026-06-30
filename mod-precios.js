@@ -219,6 +219,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
   async function muniList(){
     el.innerHTML='<div class="loading">Cargando...</div>';
     await cargarCat();
+    let GEST={}; try{ const r=await ctx.rpc('rcd_gestor',{p_gestor_id:ctx.ses.gestor_id}); GEST=(Array.isArray(r)?r[0]:r)||{}; }catch(e){}
     el.innerHTML='<div class="mcard" style="max-width:920px">'+tabbar('mu')+'<div id="muBody"></div></div>';
     wireTabs();
     const body = el.querySelector('#muBody');
@@ -226,8 +227,17 @@ window.RCD_MODULOS.precios = function(el, ctx){
 
     async function listaMun(){
       body.innerHTML='<div class="loading">Cargando...</div>';
+      const ppSigla=(GEST.sigla_patio_propio||'pp');
       let lista=[]; try{ const r=await ctx.rpc('rcd_municipios_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
       body.innerHTML=
+        '<div style="background:#F0FAF7;border:1px solid #CCE9E1;border-radius:8px;padding:12px;margin-bottom:14px">'+
+          '<div style="font-weight:600;margin-bottom:2px">Patio propio</div>'+
+          '<div class="note" style="margin-bottom:8px">Tu propia escombrera. Su sigla cierra el codigo de transporte: <span class="mono">municipio-zona-tamano-'+esc(ppSigla)+'</span></div>'+
+          '<div style="display:flex;gap:8px;align-items:flex-end">'+
+            '<div class="field" style="margin:0"><label>Sigla del patio propio</label><input id="pp_sigla" class="mono" style="width:120px" value="'+esc(ppSigla)+'" placeholder="pp"></div>'+
+            (pEditar?'<button class="btn primary sm" id="bPP">Guardar</button>':'')+
+          '</div>'+
+        '</div>'+
         '<h3 style="margin-top:0">Transporte \u00b7 municipios y zonas</h3>'+
         '<p class="lead">Aca se configura lo que arma el precio de cada ruta: municipios, zonas, siglas y metas. Las tarifas van en el boton Tarifas de cada municipio.</p>'+
         (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Municipio</button></div>':'')+
@@ -242,6 +252,23 @@ window.RCD_MODULOS.precios = function(el, ctx){
             (pEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'')+
             '</div></td></tr>').join('')+'</table>'
           : '<div class="empty">Aun no hay municipios.</div>');
+      const bpp=body.querySelector('#bPP');
+      if(bpp) bpp.onclick=async function(){
+        if(!GEST.id){ ctx.toast('No se pudo cargar el gestor, recarga la pagina.','error'); return; }
+        const nueva=(body.querySelector('#pp_sigla').value||'').trim().toLowerCase();
+        if(!nueva){ ctx.toast('Escribe una sigla.','error'); return; }
+        bpp.disabled=true;
+        try{
+          const r=scalar(await ctx.rpc('rcd_gestor_guardar',{
+            p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id,
+            p_nombre:GEST.nombre||'', p_nit:GEST.nit||'', p_telefono:GEST.telefono||'',
+            p_correo:GEST.correo||'', p_direccion:GEST.direccion||'', p_logo_url:null,
+            p_sigla_patio_propio:nueva }));
+          if(r==='OK'){ GEST.sigla_patio_propio=nueva; ctx.toast('Sigla del patio propio guardada.'); listaMun(); }
+          else ctx.toast('No se pudo guardar ('+(r||'error')+').','error');
+        }catch(e){ ctx.toast('Error de conexion.','error'); }
+        bpp.disabled=false;
+      };
       if(pCrear) body.querySelector('#bNuevo').onclick=()=>formMun(null);
       body.querySelectorAll('[data-open]').forEach(b=>{const i=+b.dataset.open; b.onclick=()=>detalle(lista[i]);});
       body.querySelectorAll('[data-tar]').forEach(b=>{const i=+b.dataset.tar; b.onclick=()=>muniDetalle(lista[i]);});
