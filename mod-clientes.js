@@ -7,6 +7,20 @@ window.RCD_MODULOS = window.RCD_MODULOS || {};
 window.RCD_MODULOS.clientes = function(el, ctx){
   const pCrear=ctx.can('clientes','escribir'), pEditar=ctx.can('clientes','editar'), pEliminar=ctx.can('clientes','eliminar');
 
+  // Tabs: Clientes y obras | Terceros (clasificacion desde TNS)
+  const rootEl = el;
+  rootEl.innerHTML =
+    '<div class="tabbar" id="cTabs" style="margin-bottom:12px">'+
+      '<button class="tab active" data-t="clientes">Clientes y obras</button>'+
+      '<button class="tab" data-t="terceros">Terceros</button>'+
+    '</div><div id="cBody"></div>';
+  const cBody = rootEl.querySelector('#cBody');
+  el = cBody;
+  rootEl.querySelectorAll('#cTabs .tab').forEach(b=>b.onclick=()=>{
+    rootEl.querySelectorAll('#cTabs .tab').forEach(x=>x.classList.toggle('active',x===b));
+    if(b.dataset.t==='terceros') terceros(cBody, ctx); else lista();
+  });
+
   // ===== Nivel 1: lista de clientes =====
   async function lista(){
     el.innerHTML='<div class="loading">Cargando...</div>';
@@ -189,6 +203,138 @@ window.RCD_MODULOS.clientes = function(el, ctx){
       ctx.toast(r==='TIENE_MOVIMIENTOS'?'No se puede anular: la obra tiene movimientos.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.'),'error');
     }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
+
+  // ===== Terceros (clasificacion desde TNS) =====
+async function terceros(body, ctx){
+  const puedeEditar = ctx.can('parametros','editar');
+  let DATA=[], fSearch='', fFiltro='todos', syncTxt='';
+
+  body.innerHTML = '<div class="loading">Trayendo terceros de TNS...</div>';
+
+  let tns=null;
+  try{
+    tns = await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accion:'traer_clientes',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,filtro:'',traer_todos:true})}).then(x=>x.json());
+  }catch(e){ tns={ok:false,error:'NO_CONECTA'}; }
+
+  if(!(tns&&tns.ok)){
+    const msg = (tns&&tns.error==='SIN_CREDENCIALES')
+      ? 'Primero conecta TNS (en Facturacion / Configuracion).'
+      : ('No se pudo traer de TNS: '+((tns&&tns.error)||'sin conexion')+'.');
+    body.innerHTML = '<h3 style="margin-top:0">Clasificacion de terceros</h3><div class="note warn">'+esc(msg)+'</div>';
+    return;
+  }
+
+  const lista = tns.clientes||[];
+  let saved=[];
+  try{ const s=await ctx.rpc('rcd_terceros_clasif_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(s)) saved=s; }catch(e){}
+  const map={}; saved.forEach(s=>{ if(s.cod_tercero) map[s.cod_tercero]=s; });
+
+  DATA = lista.map(t=>{
+    const key=(t.codigo||t.nit||'');
+    const c=map[key]||{};
+    return { key:key, codigo:t.codigo||'', nit:t.nit||'', nombre:t.nombre||'(sin nombre)',
+      naturaleza:t.natJuridica||'', ciudad:t.nombreCiudad||'', telefono:t.telefono||'',
+      es_cliente:!!c.es_cliente, es_transporte:!!c.es_transporte, es_maquila:!!c.es_maquila };
+  }).filter(d=>d.key);
+
+  const now=new Date();
+  syncTxt='TNS sincronizado · '+now.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+
+  render();
+
+  function render(){
+    body.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
+        '<div><h3 style="margin:0">Clasificacion de terceros</h3>'+
+        '<p class="lead" style="margin:4px 0 0">Los terceros se crean en TNS. Marca como se usa cada uno en la app.</p></div>'+
+        '<span style="display:inline-flex;align-items:center;gap:7px;background:#E6F4EA;color:#15803D;font-size:12px;padding:6px 11px;border-radius:8px"><span style="width:8px;height:8px;border-radius:50%;background:#15803D"></span>'+esc(syncTxt)+'</span>'+
+      '</div>'+
+      '<div style="font-size:11.5px;color:#6E7A77;margin:8px 0 12px"><b style="color:#15803D">Cliente</b> &rarr; Cotizaciones &nbsp;&middot;&nbsp; <b style="color:#15803D">Transporte</b> &rarr; Volqueteros &nbsp;&middot;&nbsp; <b style="color:#15803D">Maquila</b> &rarr; Aliados &nbsp;&middot;&nbsp; transporte y maquila comparten portal de proveedor</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
+        '<input id="tSearch" placeholder="Buscar por nombre o NIT..." style="flex:1;min-width:180px">'+
+        '<select id="tFiltro" style="width:auto">'+
+          '<option value="todos">Todos</option>'+
+          '<option value="sin">Sin clasificar</option>'+
+          '<option value="cliente">Clientes</option>'+
+          '<option value="transporte">Transporte</option>'+
+          '<option value="maquila">Maquila</option>'+
+        '</select>'+
+        '<span id="tCount" style="font-size:12px;color:#6E7A77;white-space:nowrap"></span>'+
+      '</div>'+
+      '<div id="tRows"></div>'+
+      '<div class="note" style="margin-top:10px">Se guarda solo. Destildar oculta pero conserva el historial. El alta en Volqueteros/Cotizaciones/Aliados se activa en la siguiente fase.</div>';
+    body.querySelector('#tSearch').oninput=function(){ fSearch=this.value; renderRows(); };
+    body.querySelector('#tFiltro').onchange=function(){ fFiltro=this.value; renderRows(); };
+    renderRows();
+  }
+
+  function pasa(d){
+    if(fFiltro==='sin' && (d.es_cliente||d.es_transporte||d.es_maquila)) return false;
+    if(fFiltro==='cliente' && !d.es_cliente) return false;
+    if(fFiltro==='transporte' && !d.es_transporte) return false;
+    if(fFiltro==='maquila' && !d.es_maquila) return false;
+    if(fSearch){
+      const q=fSearch.toLowerCase().replace(/\./g,'');
+      const hay=((d.nombre||'')+' '+(d.nit||'')).toLowerCase().replace(/\./g,'');
+      if(hay.indexOf(q)<0) return false;
+    }
+    return true;
+  }
+
+  function chip(label,k,key,on){
+    const st = on ? 'background:#15803D;border:1px solid #15803D;color:#fff'
+                  : 'background:#fff;border:1px solid var(--line,#E0E0DA);color:var(--muted,#6E7A77)';
+    return '<button data-chip="'+k+'" data-key="'+esc(key)+'" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:'+(puedeEditar?'pointer':'default')+';'+st+'">'+label+'</button>';
+  }
+
+  function fila(d){
+    const eff=[];
+    if(d.es_cliente) eff.push('Cotizaciones + acceso cliente (NIT, 0000)');
+    if(d.es_transporte) eff.push('Volqueteros + acceso proveedor (doc, 0000)');
+    if(d.es_maquila) eff.push('Aliados + acceso proveedor (doc, 0000)');
+    return '<div style="background:#fff;border:1px solid var(--line,#E0E0DA);border-radius:8px;padding:11px 13px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
+          '<div style="min-width:0"><b>'+esc(d.nombre)+'</b><br>'+
+            '<span class="mono" style="font-size:12px;color:#6E7A77">'+esc(d.nit?('NIT '+d.nit):'sin NIT')+'</span>'+
+            (d.naturaleza?' <span style="font-size:12px;color:#6E7A77">&middot; '+esc(d.naturaleza)+'</span>':'')+
+            (d.ciudad?' <span style="font-size:12px;color:#6E7A77">&middot; '+esc(d.ciudad)+'</span>':'')+
+          '</div>'+
+          '<div style="display:flex;gap:6px">'+chip('Cliente','cliente',d.key,d.es_cliente)+chip('Transporte','transporte',d.key,d.es_transporte)+chip('Maquila','maquila',d.key,d.es_maquila)+'</div>'+
+        '</div>'+
+        (eff.length?'<div style="font-size:11.5px;color:#6E7A77;margin-top:8px">&rarr; '+esc(eff.join('   &middot;   '))+'</div>':'')+
+      '</div>';
+  }
+
+  function renderRows(){
+    const cont=body.querySelector('#tRows');
+    const done=DATA.filter(d=>d.es_cliente||d.es_transporte||d.es_maquila).length;
+    const cEl=body.querySelector('#tCount'); if(cEl) cEl.textContent=DATA.length+' terceros · '+done+' clasificados';
+    const vis=DATA.filter(pasa);
+    if(!vis.length){ cont.innerHTML='<div class="empty">Sin resultados.</div>'; return; }
+    cont.innerHTML=vis.map(fila).join('');
+    cont.querySelectorAll('[data-chip]').forEach(b=>{ b.onclick=()=>toggle(b.dataset.key,b.dataset.chip); });
+  }
+
+  async function toggle(key,k){
+    if(!puedeEditar){ ctx.toast('No tienes permiso para clasificar.','error'); return; }
+    const d=DATA.find(x=>x.key===key); if(!d) return;
+    const field = k==='cliente'?'es_cliente':(k==='transporte'?'es_transporte':'es_maquila');
+    d[field]=!d[field];
+    try{
+      const res=scalar(await ctx.rpc('rcd_tercero_clasif_guardar',{
+        p_gestor_id:ctx.ses.gestor_id, p_usuario_id:ctx.ses.id,
+        p_cod_tercero:d.key, p_nit:d.nit, p_nombre:d.nombre, p_naturaleza:d.naturaleza,
+        p_ciudad:d.ciudad, p_telefono:d.telefono,
+        p_es_cliente:d.es_cliente, p_es_transporte:d.es_transporte, p_es_maquila:d.es_maquila
+      }));
+      if(res!=='OK'){ d[field]=!d[field]; ctx.toast(res==='SIN_COD'?'Tercero sin codigo TNS.':'No se pudo guardar.','error'); }
+      else if(ctx.log){ ctx.log('Parametros','Clasificar tercero', d.nombre+' ['+(d.es_cliente?'C':'')+(d.es_transporte?'T':'')+(d.es_maquila?'M':'')+']'); }
+    }catch(e){ d[field]=!d[field]; ctx.toast('Error de conexion al guardar.','error'); }
+    renderRows();
+  }
+}
+
 
   lista();
 };
