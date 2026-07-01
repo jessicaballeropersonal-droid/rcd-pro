@@ -238,6 +238,7 @@ window.RCD_MODULOS.precios = function(el, ctx){
             (pEditar?'<button class="btn primary sm" id="bPP">Guardar</button>':'')+
           '</div>'+
         '</div>'+
+        '<div style="margin-bottom:16px"><button class="btn primary sm" id="bConcil">Conciliaci\u00f3n con TNS</button> <span class="note" style="font-size:12px">Compara los c\u00f3digos que arma la app contra tus art\u00edculos de transporte en TNS.</span></div>'+
         '<h3 style="margin-top:0">Transporte \u00b7 municipios y zonas</h3>'+
         '<p class="lead">Aca se configura lo que arma el precio de cada ruta: municipios, zonas, siglas y metas. Las tarifas van en el boton Tarifas de cada municipio.</p>'+
         (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Municipio</button></div>':'')+
@@ -270,10 +271,98 @@ window.RCD_MODULOS.precios = function(el, ctx){
         bpp.disabled=false;
       };
       if(pCrear) body.querySelector('#bNuevo').onclick=()=>formMun(null);
+      const bcc=body.querySelector('#bConcil'); if(bcc) bcc.onclick=conciliacion;
       body.querySelectorAll('[data-open]').forEach(b=>{const i=+b.dataset.open; b.onclick=()=>detalle(lista[i]);});
       body.querySelectorAll('[data-tar]').forEach(b=>{const i=+b.dataset.tar; b.onclick=()=>muniDetalle(lista[i]);});
       body.querySelectorAll('[data-edit]').forEach(b=>{const i=+b.dataset.edit; b.onclick=()=>formMun(lista[i]);});
       body.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anularMun(lista[i]);});
+    }
+
+    async function conciliacion(){
+      body.innerHTML='<div class="loading">Generando codigos y comparando con TNS...</div>';
+      const siglaDe=n=>(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').slice(0,3);
+      // tamanos = volquetas con capacidad
+      const tams=(VOLQS||[]).map(x=>({nombre:x.nombre,t:Math.round(+x.capacidad_t||0)})).filter(x=>x.t>0);
+      // patios = propio + aliados activos
+      const ppSigla=((GEST.sigla_patio_propio||'pp')+'').trim().toLowerCase();
+      const patios=[{label:'Patio propio',sigla:ppSigla}]
+        .concat((ALIADOS||[]).filter(a=>a.activo!==false).map(a=>({label:a.razon_social,sigla:siglaDe(a.razon_social)})));
+      // municipios activos + sus zonas
+      const munis=(MUNIS||[]).filter(m=>m.activo!==false);
+      const zonasPorMuni={};
+      await Promise.all(munis.map(async m=>{
+        try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:m.id}); zonasPorMuni[m.id]=(Array.isArray(r)?r:[]).filter(c=>c.activa!==false); }
+        catch(e){ zonasPorMuni[m.id]=[]; }
+      }));
+      // codigos esperados = muni x zona x tamano x patio
+      const esperados=[];
+      munis.forEach(m=>{
+        const ms=((m.sigla||'')+'').trim().toLowerCase();
+        (zonasPorMuni[m.id]||[]).forEach(z=>{
+          const zs=((z.sigla||'')+'').trim().toLowerCase();
+          tams.forEach(t=>patios.forEach(p=>{
+            esperados.push({muni:m.nombre,zona:z.nombre,zsig:zs,tam:t.nombre,patio:p.label,psig:p.sigla,
+              code:ms+'-'+zs+'-t'+t.t+'-'+p.sigla});
+          }));
+        });
+      });
+      // TNS: articulos clasificados como transporte
+      let clasif=[]; try{ const r=await ctx.rpc('rcd_articulos_clasif_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) clasif=r; }catch(e){}
+      const tnsTransp=clasif.filter(c=>c.clase==='transporte').map(c=>((c.cod_articulo||'')+'').trim().toLowerCase()).filter(Boolean);
+      const tnsSet=new Set(tnsTransp), espSet=new Set(esperados.map(e=>e.code));
+      esperados.forEach(e=>{ e.estado=tnsSet.has(e.code)?'ok':'falta'; });
+      const raros=tnsTransp.filter(c=>!espSet.has(c));
+      const nOk=esperados.filter(e=>e.estado==='ok').length, nFalta=esperados.filter(e=>e.estado==='falta').length;
+
+      let filtro='todos';
+      function pintar(){
+        let h='';
+        if(filtro==='raro'){
+          h = raros.length
+            ? '<div class="note warn" style="margin-bottom:10px">Articulos de transporte en TNS cuyo codigo no corresponde a ninguna combinacion. Suele ser un typo en la sigla.</div>'+
+              '<table class="mtable"><tr><th>Codigo en TNS</th></tr>'+raros.map(c=>'<tr><td class="mono" style="color:#854F0B">'+esc(c)+'</td></tr>').join('')+'</table>'
+            : '<div class="empty">No hay codigos raros. Todo lo de transporte en TNS calza con la nomenclatura.</div>';
+        } else {
+          let vis=esperados.slice();
+          if(filtro==='falta') vis=vis.filter(e=>e.estado==='falta');
+          const groups={}; vis.forEach(e=>{ const k=e.muni+' \u00b7 '+e.patio+' ('+e.psig+') \u00b7 '+e.tam; (groups[k]=groups[k]||[]).push(e); });
+          const keys=Object.keys(groups).sort();
+          if(!keys.length) h='<div class="empty">Nada en este filtro.</div>';
+          keys.forEach(k=>{
+            const arr=groups[k].sort((a,b)=>(a.zsig||'').localeCompare(b.zsig||'',undefined,{numeric:true}));
+            const miss=arr.filter(x=>x.estado==='falta').length;
+            h+='<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#0F766E;margin:14px 0 5px">'+esc(k)+' <span style="color:#8A8A82;font-weight:400;text-transform:none;letter-spacing:0">'+(miss?'\u00b7 faltan '+miss:'\u00b7 ok')+'</span></div>';
+            h+=arr.map(e=>'<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:7px 11px;margin-bottom:5px">'+
+              '<span style="font-size:12.5px;color:var(--muted);min-width:70px">'+esc(e.zona)+'</span>'+
+              '<span class="mono" style="font-size:12.5px;flex:1">'+esc(e.code)+'</span>'+
+              (e.estado==='ok'?'<span class="badge ok">coincide</span>':'<span class="badge" style="background:#FAECE7;color:#993C1D">falta</span>')+'</div>').join('');
+          });
+        }
+        cont.innerHTML=h;
+      }
+
+      body.innerHTML=
+        '<button class="btn ghost sm" id="bBackCC">&larr; Transporte</button>'+
+        '<h3 style="margin:12px 0 4px">Conciliaci\u00f3n con TNS</h3>'+
+        '<p class="lead" style="margin:0 0 12px">La app arma los codigos esperados (municipio-zona-tamano-patio) y los compara con tus articulos de transporte en TNS.</p>'+
+        (esperados.length?'':'<div class="note warn" style="margin-bottom:12px">No hay combinaciones para generar. Revisa que haya municipios con zonas, tamanos de volqueta y siglas cargadas.</div>')+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+
+          '<div style="flex:1;min-width:90px;background:#F0FAF7;border-radius:8px;padding:10px 12px;text-align:center"><div style="font-size:22px;font-weight:600;color:#0F6E56">'+nOk+'</div><div style="font-size:11px;color:var(--muted)">coinciden</div></div>'+
+          '<div style="flex:1;min-width:90px;background:#FAECE7;border-radius:8px;padding:10px 12px;text-align:center"><div style="font-size:22px;font-weight:600;color:#993C1D">'+nFalta+'</div><div style="font-size:11px;color:var(--muted)">faltan en TNS</div></div>'+
+          '<div style="flex:1;min-width:90px;background:#FAEEDA;border-radius:8px;padding:10px 12px;text-align:center"><div style="font-size:22px;font-weight:600;color:#854F0B">'+raros.length+'</div><div style="font-size:11px;color:var(--muted)">codigo raro</div></div>'+
+        '</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><span style="font-size:12px;color:var(--muted)">Filtrar:</span>'+
+          '<button class="btn sm cc-f" data-f="todos">Todos</button>'+
+          '<button class="btn sm cc-f" data-f="falta">Solo faltantes</button>'+
+          '<button class="btn sm cc-f" data-f="raro">Solo raros</button></div>'+
+        '<div id="ccCont"></div>'+
+        '<div class="note" style="margin-top:10px">Los que faltan: crea ese articulo en TNS con ese codigo exacto y clasificalo como transporte.</div>';
+      const cont=body.querySelector('#ccCont');
+      body.querySelector('#bBackCC').onclick=listaMun;
+      function marca(b){ body.querySelectorAll('.cc-f').forEach(x=>{ x.classList.toggle('primary',x===b); x.classList.toggle('ghost',x!==b); }); }
+      body.querySelectorAll('.cc-f').forEach(b=>{ b.onclick=()=>{ filtro=b.dataset.f; marca(b); pintar(); }; });
+      marca(body.querySelector('.cc-f[data-f="todos"]'));
+      pintar();
     }
 
     function formMun(m){
