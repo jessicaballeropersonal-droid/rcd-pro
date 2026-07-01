@@ -130,133 +130,20 @@ async function identidad(body, ctx){
 
 // ---------- Pestana PRODUCTOS TERMINADOS ----------
 async function productos(body, ctx){
-  const puedeCrear    = ctx.can('parametros','escribir');
-  const puedeEditar   = ctx.can('parametros','editar');
-  const puedeEliminar = ctx.can('parametros','eliminar');
-  let tnsMap={}, tnsOn=false, codSuc='';
-
-  async function cargar(){
-    body.innerHTML = '<div class="loading">Cargando...</div>';
-    let lista=[];
-    try{ const r = await ctx.rpc('rcd_productos_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
-    tnsMap={};
-    try{ const m = await ctx.rpc('rcd_tns_materiales_lista',{p_gestor_id:ctx.ses.gestor_id});
-      (Array.isArray(m)?m:[]).forEach(x=>{ if(x.producto_id) tnsMap[x.producto_id]=x.cod_mat||''; }); }catch(e){}
-    try{ const c=scalar(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{};
-      tnsOn=!!c.tiene_credenciales; codSuc=c.codigo_sucursal||''; }catch(e){}
-    render(lista);
-  }
-
-  function badgeTns(pid){
-    const cod=tnsMap[pid];
-    return cod ? '<span class="badge ok mono">TNS '+esc(cod)+'</span>' : '<span class="badge danger">Sin TNS</span>';
-  }
-
-  function render(lista){
-    body.innerHTML =
-      '<h3 style="margin-top:0">Productos terminados</h3>'+
-      '<p class="lead">Lo que resulta de transformar el RCD aprovechable. Lo usan Produccion y Despacho.</p>'+
-      '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
-        (puedeCrear?'<button class="btn primary sm" id="btnNuevo">+ Agregar producto</button>':'')+
-        (puedeCrear&&tnsOn?'<button class="btn ghost sm" id="btnSync">Sincronizar con TNS</button>':'')+
-      '</div>'+
-      (lista.length? tabla(lista) : '<div class="empty">Aun no hay productos.</div>');
-    if(puedeCrear) body.querySelector('#btnNuevo').onclick=()=>form(null);
-    const bs=body.querySelector('#btnSync'); if(bs) bs.onclick=()=>sincronizar(lista);
-    body.querySelectorAll('[data-edit]').forEach(b=>{ const i=+b.dataset.edit; b.onclick=()=>form(lista[i]); });
-    body.querySelectorAll('[data-anular]').forEach(b=>{ const i=+b.dataset.anular; b.onclick=()=>anular(lista[i]); });
-  }
-
-  async function sincronizar(lista){
-    if(!codSuc){ ctx.toast('Falta el Codigo sucursal en Facturacion -> Configuracion.','error'); return; }
-    const btn=body.querySelector('#btnSync'); if(btn){btn.disabled=true; btn.textContent='Sincronizando...';}
-    try{
-      const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({accion:'traer_materiales',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:codSuc})}).then(x=>x.json());
-      if(!(r&&r.ok)){ ctx.toast('TNS: '+((r&&r.error)||'error'),'error'); if(btn){btn.disabled=false; btn.textContent='Sincronizar con TNS';} return; }
-      const tns=r.materiales||[];
-      const norm=s=>(s||'').toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-      let emp=0;
-      for(const p of lista){
-        if(tnsMap[p.id]) continue;
-        const hit=tns.find(x=>norm(x.descripcion)===norm(p.nombre));
-        if(hit){
-          try{ const rr=scalar(await ctx.rpc('rcd_tns_material_set',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_tipo:'producto',p_producto_id:p.id,p_cod_mat:hit.codigo,p_nombre_tns:hit.descripcion}));
-            if(rr==='OK') emp++;
-          }catch(e){}
-        }
-      }
-      if(emp>0 && ctx.log) ctx.log('Parametros','Productos sincronizados TNS', emp+' de '+lista.length);
-      ctx.toast('TNS: '+tns.length+' materiales, emparejados '+emp);
-      cargar();
-    }catch(e){ ctx.toast('Error de conexion.','error'); if(btn){btn.disabled=false; btn.textContent='Sincronizar con TNS';} }
-  }
-
-  function tabla(lista){
-    return '<table class="mtable"><tr><th>Producto</th><th>TNS</th><th>Estado</th><th></th></tr>'+
-      lista.map((p,i)=>{
-        const acts =
-          (puedeEditar  ?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
-          (puedeEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'');
-        return '<tr><td><b>'+esc(p.nombre)+'</b></td>'+
-          '<td>'+badgeTns(p.id)+'</td>'+
-          '<td><span class="badge '+(p.activo?'ok':'off')+'">'+(p.activo?'Activo':'Inactivo')+'</span></td>'+
-          '<td><div class="rowbtns">'+(acts||'<span class="mono" style="color:#C9C9C1;font-size:11px">solo lectura</span>')+'</div></td></tr>';
-      }).join('')+'</table>';
-  }
-
-  function form(p){
-    const esNuevo = !p;
-    const codActual = p ? (tnsMap[p.id]||'') : '';
-    body.innerHTML =
-      '<h3 style="margin-top:0">'+(esNuevo?'Nuevo producto':'Editar producto')+'</h3>'+
-      '<div class="field"><label>Nombre del producto</label><input id="p_nombre" value="'+(esNuevo?'':esc(p.nombre))+'"></div>'+
-      (esNuevo?'':'<div class="field"><label>Estado</label><select id="p_activo"><option value="true"'+(p.activo?' selected':'')+'>Activo</option><option value="false"'+(!p.activo?' selected':'')+'>Inactivo</option></select></div>')+
-      (esNuevo?'':'<div class="field"><label>Codigo en TNS <span class="mono" style="color:#9a9a90;font-size:11px">(para facturar)</span></label><input id="p_codtns" class="mono" value="'+esc(codActual)+'" placeholder="ej. ARESEC"></div>')+
-      (esNuevo?'<div class="note">El codigo de TNS lo emparejas despues de crear, con "Sincronizar con TNS" o editando.</div>':'')+
-      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>';
-    body.querySelector('#bCancel').onclick=cargar;
-    body.querySelector('#bSave').onclick=async function(){
-      const btn=this; const nombre=v(body,'p_nombre');
-      if(!nombre){ ctx.toast('Escribe el nombre del producto.','error'); return; }
-      const activo = esNuevo ? true : (body.querySelector('#p_activo').value==='true');
-      btn.disabled=true; btn.textContent='Guardando...';
-      try{
-        const res = await ctx.rpc('rcd_producto_guardar',{
-          p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id,
-          p_id: esNuevo?null:p.id, p_nombre:nombre, p_activo:activo
-        });
-        const r = scalar(res);
-        if(r==='OK'){
-          if(!esNuevo){
-            const cod=v(body,'p_codtns');
-            if(cod!==(tnsMap[p.id]||'')){
-              try{ await ctx.rpc('rcd_tns_material_set',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_tipo:'producto',p_producto_id:p.id,p_cod_mat:cod,p_nombre_tns:nombre}); }catch(e){}
-            }
-          }
-          ctx.toast('Producto guardado'); cargar(); return;
-        }
-        if(r==='SIN_PERMISO') ctx.toast('No tienes permiso.','error');
-        else if(r==='NOMBRE_VACIO') ctx.toast('El nombre no puede ir vacio.','error');
-        else ctx.toast('No se pudo guardar.','error');
-      }catch(e){ ctx.toast('Error de conexion al guardar.','error'); }
-      btn.disabled=false; btn.textContent='Guardar';
-    };
-  }
-
-  async function anular(p){
-    if(!(await ctx.confirm('Anular el producto "'+p.nombre+'"? Se ocultara, pero el historico queda.'))) return;
-    try{
-      const res = await ctx.rpc('rcd_producto_anular',{p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:p.id});
-      const r = scalar(res);
-      if(r==='OK'){ ctx.toast('Producto anulado'); cargar(); return; }
-      if(r==='TIENE_INVENTARIO') ctx.toast('No se puede anular: el producto tiene inventario.','error');
-      else if(r==='SIN_PERMISO') ctx.toast('No tienes permiso para anular.','error');
-      else ctx.toast('No se pudo anular.','error');
-    }catch(e){ ctx.toast('Error de conexion.','error'); }
-  }
-
-  cargar();
+  body.innerHTML = '<div class="loading">Cargando...</div>';
+  let lista=[];
+  try{ const r = await ctx.rpc('rcd_productos_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) lista=r; }catch(e){}
+  const activos=lista.filter(p=>p.activo!==false);
+  body.innerHTML =
+    '<h3 style="margin-top:0">Productos terminados</h3>'+
+    '<p class="lead">Los productos vienen de clasificar un articulo como "Producto" en Lista de precios &rarr; Articulos. Aca solo se consultan.</p>'+
+    (activos.length
+      ? '<table class="mtable"><tr><th>Producto</th><th>Codigo (contable)</th><th>Estado</th></tr>'+
+        activos.map(p=>'<tr><td><b>'+esc(p.nombre)+'</b></td>'+
+          '<td class="mono">'+(p.cod_articulo?esc(p.cod_articulo):'<span style="color:#993C1D">sin codigo</span>')+'</td>'+
+          '<td><span class="badge '+(p.activo?'ok':'off')+'">'+(p.activo?'Activo':'Inactivo')+'</span></td></tr>').join('')+'</table>'
+      : '<div class="empty">Aun no hay productos. Clasifica un articulo como "Producto" en Lista de precios &rarr; Articulos.</div>')+
+    '<div class="note" style="margin-top:10px">Para agregar o quitar un producto, clasifica o reclasifica el articulo en Lista de precios &rarr; Articulos.</div>';
 }
 
 // ---------- Pestana DENSIDADES ----------
