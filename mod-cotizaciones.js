@@ -66,7 +66,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
         const _ob=st.obrasOpts.find(o=>o.id===st.obra_id); if(_ob){ st.municipio_id=_ob.municipio_id||''; if(!st.comuna_id) st.comuna_id=_ob.comuna_id||''; }
         await cargarContexto(st);
         const lins=await ctx.rpc('rcd_cotizacion_lineas_get',{p_cotizacion_id:cotId});
-        st.lineas=(Array.isArray(lins)?lins:[]).map(l=>({tipo:l.tipo,descripcion:l.descripcion,item_id:l.item_id||'',producto_id:l.producto_id||'',tamano_id:l.tamano_id||'',destino_tipo:l.destino_tipo||'',destino_aliado_id:l.destino_aliado_id||'',direccion:l.direccion||'',cod_articulo:l.cod_articulo||'',cantidad:l.cantidad,precio_unit:l.precio_unit,aplica_iva:l.aplica_iva,toneladas:''}));
+        st.lineas=agruparLineas(Array.isArray(lins)?lins:[]);
       }catch(e){ ctx.toast('No se pudo cargar la cotizacion.','error'); }
     }
     renderEditor(st);
@@ -254,7 +254,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   function verPDF(st){
     abrirPDF({ numero:st.numero, fecha:st.fecha, valida_hasta:st.valida_hasta, estado:st.estado,
       cliente: st.cliente_nombre || ((st.clientes.find(c=>c.id===st.cliente_id)||{}).razon_social) || '',
-      obra:st.obra, observaciones:st.observaciones, lineas:st.lineas });
+      obra:st.obra, observaciones:st.observaciones, lineas:flattenCards(st.lineas) });
   }
 
   async function pdfDeId(cotId){
@@ -270,23 +270,12 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     w.document.open(); w.document.write(buildCotHTML(d,g)); w.document.close();
   }
 
-  // ---- lineas ----
+  // ---- lineas (modelo tarjeta: producto/servicio + su transporte) ----
   function destinosDe(st){
-    const d=[{tipo:'nuestro',aliado:'',label:'Nuestro RCD'}];
-    (st.aliados||[]).filter(a=>a.es_receptor).forEach(a=>d.push({tipo:'otro_rcd',aliado:a.id,label:'Otro RCD: '+a.razon_social}));
+    const d=[{tipo:'nuestro',aliado:'',label:'Patio propio'}];
+    (st.aliados||[]).filter(a=>a.es_receptor).forEach(a=>d.push({tipo:'otro_rcd',aliado:a.id,label:a.razon_social}));
     (st.aliados||[]).filter(a=>a.es_maquila).forEach(a=>d.push({tipo:'maquila',aliado:a.id,label:'Maquila: '+a.razon_social}));
     return d;
-  }
-  function cambiarTipo(st,i,tipo){
-    const l=st.lineas[i]; l.tipo=tipo;
-    l.item_id=''; l.producto_id=''; l.cod_articulo=''; l.tamano_id=''; l.destino_tipo=''; l.destino_aliado_id=''; l.direccion=''; l.toneladas=''; l.cantidad=0; l.precio_unit=0; l.tns_falta=false; l.tns_code='';
-    if(tipo==='item'){ l.descripcion=''; l.aplica_iva=true; }
-    else { l.descripcion='Transporte'; l.direccion='recoleccion'; l.aplica_iva=false; }
-  }
-  function aplicarArticulo(st,i,codigo){
-    const l=st.lineas[i], a=(st.articulos||[]).find(x=>x.codigo===codigo);
-    l.cod_articulo=codigo; l.item_id=''; l.producto_id='';
-    l.descripcion=a?a.nombre:''; l.precio_unit=a?(+a.precio||0):0; l.tns_falta=a?!!a.sinPrecio:false;
   }
   function siglaAliado(n){ return (n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').slice(0,3); }
   function patioSiglaDe(st,l){
@@ -294,76 +283,109 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     const a=(st.aliados||[]).find(x=>x.id===l.destino_aliado_id);
     return a?siglaAliado(a.razon_social):'';
   }
-  function recalcTransporte(st,i){
+  function nuevaLinea(){ return {cod_articulo:'',descripcion:'',cantidad:'',precio_unit:0,aplica_iva:true,p_falta:false,t_modo:'cliente',tamano_id:'',destino_tipo:'',destino_aliado_id:'',t_viajes:0,t_code:'',t_precio:0,t_falta:false}; }
+  function aplicarArticulo(st,i,codigo){
+    const l=st.lineas[i], a=(st.articulos||[]).find(x=>x.codigo===codigo);
+    l.cod_articulo=codigo; l.descripcion=a?a.nombre:''; l.precio_unit=a?(+a.precio||0):0; l.p_falta=a?!!a.sinPrecio:false;
+  }
+  function recalcCard(st,i){
     const l=st.lineas[i];
+    if((l.t_modo||'cliente')==='cliente'){ l.t_viajes=0; l.t_code=''; l.t_precio=0; l.t_falta=false; return; }
     const vq=(st.volqs||[]).find(x=>x.id===l.tamano_id), cap=vq?(+vq.capacidad_t||0):0;
-    const ton=parseNum(l.toneladas)||0;
-    l.cantidad=(cap>0 && ton>0)?Math.ceil(ton/cap):0;
-    // Armar el codigo TNS: municipio-zona-tTamano-patio (muni y zona salen de la obra)
-    const ps=patioSiglaDe(st,l);
-    const code=(st.muniSigla||'')+'-'+(st.zonaSigla||'')+'-t'+Math.round(cap||0)+'-'+ps;
-    l.tns_code=code; l.cod_articulo=code;
+    const ton=parseNum(l.cantidad)||0;
+    l.t_viajes=(cap>0 && ton>0)?Math.ceil(ton/cap):0;
+    const code=(st.muniSigla||'')+'-'+(st.zonaSigla||'')+'-t'+Math.round(cap||0)+'-'+patioSiglaDe(st,l);
+    l.t_code=code;
     const hit=(st.tnsMap&&cap>0)?st.tnsMap[code]:null;
-    l.precio_unit=hit?(+hit.precio||0):0;
-    l.tns_falta=(cap>0 && !hit);
-    const dl=destinosDe(st).find(d=>d.tipo===(l.destino_tipo||'nuestro') && (d.aliado||'')===(l.destino_aliado_id||''));
-    const sent=(l.direccion==='entrega')?'Despacho':'Recoleccion';
-    l.descripcion=sent+' '+(vq?vq.nombre:'')+(dl?(' -> '+dl.label):'');
+    l.t_precio=hit?(+hit.precio||0):0;
+    l.t_falta=(cap>0 && !hit);
   }
-  function updateRowTransport(st,i){
-    recalcTransporte(st,i); const l=st.lineas[i];
-    const cv=el.querySelector('[data-cantv="'+i+'"]'); if(cv) cv.textContent=numEs(l.cantidad||0);
-    const pv=el.querySelector('[data-precv="'+i+'"]'); if(pv) pv.textContent=money(l.precio_unit);
-    recalc(st);
+  function agruparLineas(rows){
+    const groups={}, order=[];
+    (rows||[]).forEach((r,idx)=>{
+      const g=(r.grupo!=null)?('g'+r.grupo):('x'+idx);
+      if(!groups[g]){ groups[g]={}; order.push(g); }
+      if(r.tipo==='transporte') groups[g].t=r; else groups[g].p=r;
+    });
+    return order.map(g=>{
+      const p=groups[g].p, t=groups[g].t, card=nuevaLinea();
+      if(p){ card.cod_articulo=p.cod_articulo||''; card.descripcion=p.descripcion||''; card.cantidad=(p.cantidad!=null?p.cantidad:''); card.precio_unit=+p.precio_unit||0; card.aplica_iva=!!p.aplica_iva; }
+      if(t){ card.t_modo=(t.direccion==='entrega'?'despacho':'recoleccion'); card.tamano_id=t.tamano_id||''; card.destino_tipo=t.destino_tipo||''; card.destino_aliado_id=t.destino_aliado_id||''; card.t_viajes=+t.cantidad||0; card.t_precio=+t.precio_unit||0; card.t_code=t.cod_articulo||''; if(!p) card.descripcion=t.descripcion||''; }
+      return card;
+    });
   }
-
-  function filaLinea(l,i,st,dis){
-    const tipoSel = dis ? ({item:'Item',transporte:'Transporte'}[l.tipo]||l.tipo)
-      : '<select data-tipo="'+i+'"><option value="item"'+(l.tipo==='item'?' selected':'')+'>Item</option>'+
-        '<option value="transporte"'+(l.tipo==='transporte'?' selected':'')+'>Transporte</option></select>';
-    let detalle, cant, prec;
-    if(l.tipo==='transporte'){
-      const dests=destinosDe(st), destVal=(l.destino_tipo||'nuestro')+'|'+(l.destino_aliado_id||'');
-      detalle = dis ? esc(l.descripcion||'Transporte')
-        : '<div style="display:flex;flex-direction:column;gap:4px">'+
-          '<select data-dir="'+i+'"><option value="recoleccion"'+((l.direccion||'recoleccion')==='recoleccion'?' selected':'')+'>Recoleccion (recoge RCD)</option><option value="entrega"'+(l.direccion==='entrega'?' selected':'')+'>Entrega (lleva producto)</option></select>'+
-          '<select data-tam="'+i+'"><option value="">Tamano...</option>'+(st.volqs||[]).map(t=>'<option value="'+t.id+'"'+(l.tamano_id===t.id?' selected':'')+'>'+esc(t.nombre)+'</option>').join('')+'</select>'+
-          '<select data-dest="'+i+'">'+dests.map(d=>'<option value="'+d.tipo+'|'+(d.aliado||'')+'"'+(destVal===(d.tipo+'|'+(d.aliado||''))?' selected':'')+'>'+esc(d.label)+'</option>').join('')+'</select>'+
-          '<input class="cellnum" data-ton="'+i+'" placeholder="Toneladas" value="'+(l.toneladas!==''&&l.toneladas!=null?numEs(l.toneladas):'')+'" style="width:120px">'+
+  function flattenCards(cards){
+    const rows=[];
+    (cards||[]).forEach(l=>{
+      rows.push({tipo:'producto',descripcion:l.descripcion,cantidad:+l.cantidad||0,precio_unit:+l.precio_unit||0,aplica_iva:!!l.aplica_iva});
+      if((l.t_modo||'cliente')!=='cliente') rows.push({tipo:'transporte',descripcion:(l.t_modo==='despacho'?'Despacho':'Recoleccion'),cantidad:+l.t_viajes||0,precio_unit:+l.t_precio||0,aplica_iva:false});
+    });
+    return rows;
+  }
+  function optT(val,sel,label){ return '<option value="'+esc(val)+'"'+(sel?' selected':'')+'>'+esc(label)+'</option>'; }
+  function renderCard(l,i,st,dis){
+    const modo=l.t_modo||'cliente';
+    const prodSub=(+l.cantidad||0)*(+l.precio_unit||0);
+    const dests=destinosDe(st), destVal=(l.destino_tipo||'nuestro')+'|'+(l.destino_aliado_id||'');
+    let h='<div class="cot-card">';
+    h+='<div class="cot-head"><span class="cot-tag">Producto / servicio</span>'+(dis?'':'<span class="cot-x" data-rm="'+i+'">quitar</span>')+'</div>';
+    h+= dis ? '<div class="cot-ro"><b>'+esc(l.descripcion||'')+'</b></div>'
+      : '<select class="cot-sel" data-art="'+i+'"><option value="">Producto/servicio...</option>'+(st.articulos||[]).map(p=>optT(p.codigo,l.cod_articulo===p.codigo,p.nombre+' ('+p.clase+')'+(p.sinPrecio?' - sin precio':''))).join('')+'</select>';
+    h+='<div class="cot-grid3">'+
+      '<div><div class="cot-lbl">Cantidad (t)</div>'+(dis?('<div class="cot-ro">'+numEs(l.cantidad||0)+'</div>'):('<input class="cot-in" data-cant="'+i+'" value="'+(l.cantidad!==''&&l.cantidad!=null?numEs(l.cantidad):'')+'">'))+'</div>'+
+      '<div><div class="cot-lbl">Precio TNS</div><div class="cot-ro">'+money(l.precio_unit)+(l.cod_articulo?' /t':'')+'</div></div>'+
+      '<div><div class="cot-lbl">Subtotal</div><div class="cot-ro" style="font-weight:600" data-prodsub="'+i+'">'+money(prodSub)+'</div></div>'+
+      '</div>';
+    if(l.p_falta) h+='<div class="cot-warn">Este articulo no tiene precio en TNS.</div>';
+    h+='<div class="cot-div"></div><div class="cot-lbl">Transporte</div>';
+    h+= dis ? '<div class="cot-ro">'+(modo==='cliente'?'Cliente recoge (sin transporte)':(modo==='despacho'?'Despacho':'Recoleccion'))+'</div>'
+      : '<select class="cot-sel" data-modo="'+i+'">'+optT('cliente',modo==='cliente','Cliente recoge - sin transporte')+optT('recoleccion',modo==='recoleccion','Recoleccion - nosotros recogemos')+optT('despacho',modo==='despacho','Despacho - nosotros llevamos')+'</select>';
+    if(modo!=='cliente'){
+      if(!dis){
+        h+='<div class="cot-grid2">'+
+          '<div><div class="cot-lbl">Tamano</div><select class="cot-sel sm" data-tam="'+i+'"><option value="">Tamano...</option>'+(st.volqs||[]).map(t=>optT(t.id,l.tamano_id===t.id,t.nombre)).join('')+'</select></div>'+
+          '<div><div class="cot-lbl">Patio</div><select class="cot-sel sm" data-dest="'+i+'">'+dests.map(d=>optT(d.tipo+'|'+(d.aliado||''),destVal===(d.tipo+'|'+(d.aliado||'')),d.label)).join('')+'</select></div>'+
           '</div>';
-      cant = (dis?'':'<span style="font-size:11px;color:var(--muted)">viajes </span>')+'<span class="mono" data-cantv="'+i+'">'+numEs(l.cantidad||0)+'</span>';
-      prec = '<div style="text-align:right;line-height:1.4"><span class="mono" data-precv="'+i+'">'+money(l.precio_unit)+'</span>'+
-             (l.tns_code&&l.tamano_id?'<div class="mono" style="font-size:10px;color:var(--muted)">'+esc(l.tns_code)+'</div>':'')+
-             (l.tns_falta?'<div style="font-size:10px;color:#993C1D">sin precio en TNS</div>':'')+'</div>';
-    } else {
-      detalle = dis ? esc(l.descripcion||'')
-        : '<select data-item="'+i+'"><option value="">Producto/servicio...</option>'+(st.articulos||[]).map(p=>'<option value="'+esc(p.codigo)+'"'+(l.cod_articulo===p.codigo?' selected':'')+'>'+esc(p.nombre)+' ('+esc(p.clase)+')'+(p.sinPrecio?' - sin precio':'')+'</option>').join('')+'</select>';
-      cant = dis ? numEs(l.cantidad) : '<input class="cellnum" data-cant="'+i+'" value="'+numEs(l.cantidad)+'" style="width:90px">';
-      prec = '<div style="text-align:right;line-height:1.4"><span class="mono" data-precv="'+i+'">'+money(l.precio_unit)+'</span>'+
-             (l.cod_articulo?'<div class="mono" style="font-size:10px;color:var(--muted)">'+esc(l.cod_articulo)+'</div>':'')+
-             (l.tns_falta?'<div style="font-size:10px;color:#993C1D">sin precio en TNS</div>':'')+'</div>';
+      }
+      const tt=(+l.t_viajes||0)*(+l.t_precio||0);
+      h+='<div class="cot-pills">'+
+        '<span class="cot-pill" data-viajes="'+i+'">'+numEs(l.t_viajes||0)+' viajes</span>'+
+        (l.t_code?'<span class="cot-pill mono">'+esc(l.t_code)+'</span>':'')+
+        '<span class="cot-pill" data-tpill="'+i+'" style="'+(l.t_falta?'background:#FAECE7;color:#993C1D':'background:#E1F5EE;color:#0F6E56')+'">'+(l.t_falta?'sin precio en TNS':(money(l.t_precio)+'/viaje &rarr; '+money(tt)))+'</span>'+
+        '</div>';
     }
-    const lt=(+l.cantidad||0)*(+l.precio_unit||0);
-    return '<tr><td>'+tipoSel+'</td><td>'+detalle+'</td>'+
-      '<td style="text-align:right">'+cant+'</td>'+
-      '<td style="text-align:right">'+prec+'</td>'+
-      '<td>'+(l.aplica_iva?'19%':'-')+'</td>'+
-      '<td style="text-align:right" class="mono" data-tot="'+i+'">'+money(lt)+'</td>'+
-      '<td>'+(dis?'':'<button class="btn ghost sm" data-rm="'+i+'">x</button>')+'</td></tr>';
+    const cardTot=prodSub+((modo!=='cliente')?(+l.t_viajes||0)*(+l.t_precio||0):0);
+    h+='<div class="cot-tot">Total linea: <b data-cardtot="'+i+'">'+money(cardTot)+'</b></div>';
+    h+='</div>';
+    return h;
   }
-
+  function cotCSS(){ return '<style>'+
+    '.cot-card{background:#F6F7F2;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}'+
+    '.cot-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}'+
+    '.cot-tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--esc)}'+
+    '.cot-x{font-size:12px;color:var(--muted);cursor:pointer}'+
+    '.cot-sel,.cot-in{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-family:Barlow;font-size:14px;background:#fff;-webkit-appearance:none;appearance:none}'+
+    ".cot-sel{background-image:url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236E7A77' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>\");background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}"+
+    '.cot-sel.sm{padding:9px 11px;font-size:13px}'+
+    '.cot-grid3,.cot-grid2{display:flex;gap:8px;margin-top:8px}.cot-grid3>div,.cot-grid2>div{flex:1}'+
+    '.cot-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin-bottom:3px}'+
+    '.cot-ro{padding:10px 2px;font-size:14px;color:var(--ink)}'+
+    '.cot-div{border-top:1px dashed var(--line);margin:12px 0 10px}'+
+    '.cot-pills{margin-top:9px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}'+
+    '.cot-pill{font-size:11.5px;padding:3px 9px;border-radius:6px;background:#fff;border:1px solid var(--line)}'+
+    '.cot-tot{text-align:right;margin-top:12px;font-size:14px;border-top:1px solid var(--line);padding-top:8px}'+
+    '.cot-warn{font-size:11px;color:#993C1D;margin-top:6px}'+
+    '</style>'; }
   function renderLineas(st){
     const box=el.querySelector('#lineasBox'); if(!box) return;
     const dis=!editable(st);
     const hayObra=!!st.obra_id;
-    box.innerHTML=
+    box.innerHTML= cotCSS()+
       '<div style="display:flex;align-items:center;gap:10px;margin-top:14px"><b>Lineas</b>'+
       (!dis&&hayObra?'<button class="btn ghost sm" id="bAddLinea" style="margin-left:auto">+ Agregar linea</button>':'')+'</div>'+
       (!hayObra?'<div class="note warn">Selecciona primero el cliente y la obra.</div>':
-        (st.lineas.length?
-          '<table class="mtable"><tr><th>Tipo</th><th>Detalle</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio</th><th>IVA</th><th style="text-align:right">Total</th><th></th></tr>'+
-          st.lineas.map((l,i)=>filaLinea(l,i,st,dis)).join('')+'</table>'
-          : '<div class="empty">Sin lineas. Agrega item o transporte.</div>'))+
+        (st.lineas.length? st.lineas.map((l,i)=>renderCard(l,i,st,dis)).join('')
+          : '<div class="empty">Sin lineas. Agrega un producto o servicio.</div>'))+
       '<div style="margin-top:12px;text-align:right;line-height:1.9">'+
         '<div>Subtotal: <b id="totSub">'+money(0)+'</b></div>'+
         '<div>IVA (19%): <b id="totIva">'+money(0)+'</b></div>'+
@@ -371,27 +393,37 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
       '</div>';
     if(!dis && hayObra){
       const add=box.querySelector('#bAddLinea');
-      if(add) add.onclick=()=>{ st.lineas.push({tipo:'item',descripcion:'',item_id:'',producto_id:'',tamano_id:'',destino_tipo:'',destino_aliado_id:'',toneladas:'',cantidad:0,precio_unit:0,aplica_iva:true}); renderLineas(st); };
+      if(add) add.onclick=()=>{ st.lineas.push(nuevaLinea()); renderLineas(st); };
       st.lineas.forEach((l,i)=>{
-        const tSel=box.querySelector('[data-tipo="'+i+'"]'); if(tSel) tSel.onchange=()=>{ cambiarTipo(st,i,tSel.value); renderLineas(st); };
-        const iSel=box.querySelector('[data-item="'+i+'"]'); if(iSel) iSel.onchange=()=>{ aplicarArticulo(st,i,iSel.value); renderLineas(st); };
-        const tamSel=box.querySelector('[data-tam="'+i+'"]'); if(tamSel) tamSel.onchange=()=>{ st.lineas[i].tamano_id=tamSel.value; recalcTransporte(st,i); renderLineas(st); };
-        const dirSel=box.querySelector('[data-dir="'+i+'"]'); if(dirSel) dirSel.onchange=()=>{ st.lineas[i].direccion=dirSel.value; recalcTransporte(st,i); renderLineas(st); };
-        const dSel=box.querySelector('[data-dest="'+i+'"]'); if(dSel) dSel.onchange=()=>{ const p=dSel.value.split('|'); st.lineas[i].destino_tipo=p[0]; st.lineas[i].destino_aliado_id=p[1]||''; recalcTransporte(st,i); renderLineas(st); };
-        const ton=box.querySelector('[data-ton="'+i+'"]'); if(ton) ton.oninput=()=>{ st.lineas[i].toneladas=ton.value; updateRowTransport(st,i); };
-        const c=box.querySelector('[data-cant="'+i+'"]'); if(c) c.oninput=()=>{ st.lineas[i].cantidad=parseNum(c.value); recalc(st); };
-        const x=box.querySelector('[data-rm="'+i+'"]'); if(x) x.onclick=()=>{ st.lineas.splice(i,1); renderLineas(st); };
+        const aSel=box.querySelector('[data-art="'+i+'"]'); if(aSel) aSel.onchange=()=>{ aplicarArticulo(st,i,aSel.value); recalcCard(st,i); renderLineas(st); };
+        const cant=box.querySelector('[data-cant="'+i+'"]'); if(cant) cant.oninput=()=>{ st.lineas[i].cantidad=parseNum(cant.value); refreshCard(st,i); };
+        const modo=box.querySelector('[data-modo="'+i+'"]'); if(modo) modo.onchange=()=>{ st.lineas[i].t_modo=modo.value; if(modo.value!=='cliente' && !st.lineas[i].destino_tipo) st.lineas[i].destino_tipo='nuestro'; recalcCard(st,i); renderLineas(st); };
+        const tam=box.querySelector('[data-tam="'+i+'"]'); if(tam) tam.onchange=()=>{ st.lineas[i].tamano_id=tam.value; recalcCard(st,i); renderLineas(st); };
+        const dest=box.querySelector('[data-dest="'+i+'"]'); if(dest) dest.onchange=()=>{ const p=dest.value.split('|'); st.lineas[i].destino_tipo=p[0]; st.lineas[i].destino_aliado_id=p[1]||''; recalcCard(st,i); renderLineas(st); };
+        const rm=box.querySelector('[data-rm="'+i+'"]'); if(rm) rm.onclick=()=>{ st.lineas.splice(i,1); renderLineas(st); };
       });
     }
     recalc(st);
   }
-
+  function refreshCard(st,i){
+    recalcCard(st,i); const l=st.lineas[i];
+    const prodSub=(+l.cantidad||0)*(+l.precio_unit||0);
+    const ps=el.querySelector('[data-prodsub="'+i+'"]'); if(ps) ps.textContent=money(prodSub);
+    if((l.t_modo||'cliente')!=='cliente'){
+      const vv=el.querySelector('[data-viajes="'+i+'"]'); if(vv) vv.textContent=numEs(l.t_viajes||0)+' viajes';
+      const tt=(+l.t_viajes||0)*(+l.t_precio||0);
+      const tp=el.querySelector('[data-tpill="'+i+'"]'); if(tp) tp.innerHTML=l.t_falta?'sin precio en TNS':(money(l.t_precio)+'/viaje &rarr; '+money(tt));
+    }
+    const ct=prodSub+(((l.t_modo||'cliente')!=='cliente')?(+l.t_viajes||0)*(+l.t_precio||0):0);
+    const cc=el.querySelector('[data-cardtot="'+i+'"]'); if(cc) cc.textContent=money(ct);
+    recalc(st);
+  }
   function recalc(st){
     let sub=0, iva=0;
-    st.lineas.forEach((l,i)=>{
-      const lt=(+l.cantidad||0)*(+l.precio_unit||0);
-      sub+=lt; if(l.aplica_iva) iva+=lt*0.19;
-      const tc=el.querySelector('[data-tot="'+i+'"]'); if(tc) tc.textContent=money(lt);
+    (st.lineas||[]).forEach(l=>{
+      const pt=(+l.cantidad||0)*(+l.precio_unit||0);
+      sub+=pt; if(l.aplica_iva) iva+=pt*0.19;
+      if((l.t_modo||'cliente')!=='cliente'){ sub+=(+l.t_viajes||0)*(+l.t_precio||0); }
     });
     const eSub=el.querySelector('#totSub'), eIva=el.querySelector('#totIva'), eTot=el.querySelector('#totTot');
     if(eSub) eSub.textContent=money(sub);
@@ -402,13 +434,21 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   async function guardar(st){
     if(!st.obra_id){ ctx.toast('Selecciona el cliente y la obra.','error'); return; }
     for(const l of st.lineas){
-      if(l.tipo==='item' && !l.cod_articulo){ ctx.toast('En una linea de item falta elegir el producto o servicio.','error'); return; }
-      if(l.tipo==='transporte' && !l.tamano_id){ ctx.toast('En una linea de transporte falta elegir el tamano.','error'); return; }
+      if(!l.cod_articulo){ ctx.toast('En una linea falta elegir el producto o servicio.','error'); return; }
+      if((l.t_modo||'cliente')!=='cliente' && !l.tamano_id){ ctx.toast('En una linea con transporte falta elegir el tamano.','error'); return; }
     }
     const btn=el.querySelector('#bGuardar'); if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    const lineas=st.lineas.map(l=>({tipo:l.tipo, descripcion:l.descripcion, item_id:l.item_id||'', producto_id:l.producto_id||'', tamano_id:l.tamano_id||'', cod_articulo:l.cod_articulo||'',
-      destino_tipo:l.destino_tipo||'', destino_aliado_id:l.destino_aliado_id||'', direccion:l.direccion||'',
-      cantidad:+l.cantidad||0, precio_unit:+l.precio_unit||0, aplica_iva:!!l.aplica_iva}));
+    const lineas=[];
+    st.lineas.forEach((l,gi)=>{
+      lineas.push({tipo:'producto', descripcion:l.descripcion, item_id:'', producto_id:'', tamano_id:'', cod_articulo:l.cod_articulo||'',
+        destino_tipo:'', destino_aliado_id:'', direccion:'', grupo:gi,
+        cantidad:+l.cantidad||0, precio_unit:+l.precio_unit||0, aplica_iva:!!l.aplica_iva});
+      if((l.t_modo||'cliente')!=='cliente'){
+        lineas.push({tipo:'transporte', descripcion:(l.t_modo==='despacho'?'Despacho':'Recoleccion'), item_id:'', producto_id:'', tamano_id:l.tamano_id||'', cod_articulo:l.t_code||'',
+          destino_tipo:l.destino_tipo||'', destino_aliado_id:l.destino_aliado_id||'', direccion:(l.t_modo==='despacho'?'entrega':'recoleccion'), grupo:gi,
+          cantidad:+l.t_viajes||0, precio_unit:+l.t_precio||0, aplica_iva:false});
+      }
+    });
     try{
       const res=scalar(await ctx.rpc('rcd_cotizacion_guardar',{
         p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:st.id,
