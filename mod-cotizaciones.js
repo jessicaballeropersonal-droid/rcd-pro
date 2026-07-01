@@ -66,7 +66,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
         const _ob=st.obrasOpts.find(o=>o.id===st.obra_id); if(_ob){ st.municipio_id=_ob.municipio_id||''; if(!st.comuna_id) st.comuna_id=_ob.comuna_id||''; }
         await cargarContexto(st);
         const lins=await ctx.rpc('rcd_cotizacion_lineas_get',{p_cotizacion_id:cotId});
-        st.lineas=(Array.isArray(lins)?lins:[]).map(l=>({tipo:l.tipo,descripcion:l.descripcion,item_id:l.item_id||'',producto_id:l.producto_id||'',tamano_id:l.tamano_id||'',destino_tipo:l.destino_tipo||'',destino_aliado_id:l.destino_aliado_id||'',direccion:l.direccion||'',cantidad:l.cantidad,precio_unit:l.precio_unit,aplica_iva:l.aplica_iva,toneladas:''}));
+        st.lineas=(Array.isArray(lins)?lins:[]).map(l=>({tipo:l.tipo,descripcion:l.descripcion,item_id:l.item_id||'',producto_id:l.producto_id||'',tamano_id:l.tamano_id||'',destino_tipo:l.destino_tipo||'',destino_aliado_id:l.destino_aliado_id||'',direccion:l.direccion||'',cod_articulo:l.cod_articulo||'',cantidad:l.cantidad,precio_unit:l.precio_unit,aplica_iva:l.aplica_iva,toneladas:''}));
       }catch(e){ ctx.toast('No se pudo cargar la cotizacion.','error'); }
     }
     renderEditor(st);
@@ -87,6 +87,16 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
         if(tns&&tns.ok){ (tns.materiales||[]).forEach(m=>{ if(m.codigo) st.tnsMap[(''+m.codigo).trim().toLowerCase()]={precio:+m.precio||0,desc:m.descripcion||''}; }); }
       }
     }catch(e){}
+    // Articulos vendibles clasificados (producto/servicio/aprovechado) con precio de TNS
+    st.articulos=[];
+    try{
+      const cl=await ctx.rpc('rcd_articulos_clasif_lista',{p_gestor_id:ctx.ses.gestor_id});
+      (Array.isArray(cl)?cl:[]).filter(c=>['producto','servicio','aprovechado'].indexOf(c.clase)>=0).forEach(c=>{
+        const code=(''+(c.cod_articulo||'')).trim().toLowerCase();
+        const hit=st.tnsMap[code];
+        st.articulos.push({ codigo:c.cod_articulo, clase:c.clase, nombre:(hit&&hit.desc)||c.cod_articulo, precio:hit?hit.precio:0, sinPrecio:!hit });
+      });
+    }catch(e){ st.articulos=[]; }
     if(st.municipio_id){
       try{ const r=await ctx.rpc('rcd_municipios_lista',{p_gestor_id:ctx.ses.gestor_id}); const m=(Array.isArray(r)?r:[]).find(x=>x.id===st.municipio_id); if(m) st.muniSigla=(''+(m.sigla||'')).trim().toLowerCase(); }catch(e){}
       try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:st.municipio_id}); const z=(Array.isArray(r)?r:[]).find(x=>x.id===st.comuna_id); if(z) st.zonaSigla=(''+(z.sigla||'')).trim().toLowerCase(); }catch(e){}
@@ -269,14 +279,14 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   }
   function cambiarTipo(st,i,tipo){
     const l=st.lineas[i]; l.tipo=tipo;
-    l.item_id=''; l.producto_id=''; l.tamano_id=''; l.destino_tipo=''; l.destino_aliado_id=''; l.direccion=''; l.toneladas=''; l.cantidad=0; l.precio_unit=0;
+    l.item_id=''; l.producto_id=''; l.cod_articulo=''; l.tamano_id=''; l.destino_tipo=''; l.destino_aliado_id=''; l.direccion=''; l.toneladas=''; l.cantidad=0; l.precio_unit=0; l.tns_falta=false; l.tns_code='';
     if(tipo==='item'){ l.descripcion=''; l.aplica_iva=true; }
     else { l.descripcion='Transporte'; l.direccion='recoleccion'; l.aplica_iva=false; }
   }
-  function aplicarItem(st,i,item_id){
-    const l=st.lineas[i], it=(st.items||[]).find(x=>x.id===item_id);
-    l.item_id=item_id; l.descripcion=it?it.nombre:''; l.precio_unit=it?(+it.precio_t||0):0;
-    l.producto_id=(it&&it.clase==='producto')?(it.producto_id||''):'';
+  function aplicarArticulo(st,i,codigo){
+    const l=st.lineas[i], a=(st.articulos||[]).find(x=>x.codigo===codigo);
+    l.cod_articulo=codigo; l.item_id=''; l.producto_id='';
+    l.descripcion=a?a.nombre:''; l.precio_unit=a?(+a.precio||0):0; l.tns_falta=a?!!a.sinPrecio:false;
   }
   function siglaAliado(n){ return (n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').slice(0,3); }
   function patioSiglaDe(st,l){
@@ -292,7 +302,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     // Armar el codigo TNS: municipio-zona-tTamano-patio (muni y zona salen de la obra)
     const ps=patioSiglaDe(st,l);
     const code=(st.muniSigla||'')+'-'+(st.zonaSigla||'')+'-t'+Math.round(cap||0)+'-'+ps;
-    l.tns_code=code;
+    l.tns_code=code; l.cod_articulo=code;
     const hit=(st.tnsMap&&cap>0)?st.tnsMap[code]:null;
     l.precio_unit=hit?(+hit.precio||0):0;
     l.tns_falta=(cap>0 && !hit);
@@ -327,9 +337,11 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
              (l.tns_falta?'<div style="font-size:10px;color:#993C1D">sin precio en TNS</div>':'')+'</div>';
     } else {
       detalle = dis ? esc(l.descripcion||'')
-        : '<select data-item="'+i+'"><option value="">Item...</option>'+(st.items||[]).map(p=>'<option value="'+p.id+'"'+(l.item_id===p.id?' selected':'')+'>'+esc(p.nombre)+(p.clase==='producto'?' (producto)':'')+'</option>').join('')+'</select>';
+        : '<select data-item="'+i+'"><option value="">Producto/servicio...</option>'+(st.articulos||[]).map(p=>'<option value="'+esc(p.codigo)+'"'+(l.cod_articulo===p.codigo?' selected':'')+'>'+esc(p.nombre)+' ('+esc(p.clase)+')'+(p.sinPrecio?' - sin precio':'')+'</option>').join('')+'</select>';
       cant = dis ? numEs(l.cantidad) : '<input class="cellnum" data-cant="'+i+'" value="'+numEs(l.cantidad)+'" style="width:90px">';
-      prec = '<span class="mono" data-precv="'+i+'">'+money(l.precio_unit)+'</span>';
+      prec = '<div style="text-align:right;line-height:1.4"><span class="mono" data-precv="'+i+'">'+money(l.precio_unit)+'</span>'+
+             (l.cod_articulo?'<div class="mono" style="font-size:10px;color:var(--muted)">'+esc(l.cod_articulo)+'</div>':'')+
+             (l.tns_falta?'<div style="font-size:10px;color:#993C1D">sin precio en TNS</div>':'')+'</div>';
     }
     const lt=(+l.cantidad||0)*(+l.precio_unit||0);
     return '<tr><td>'+tipoSel+'</td><td>'+detalle+'</td>'+
@@ -362,7 +374,7 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
       if(add) add.onclick=()=>{ st.lineas.push({tipo:'item',descripcion:'',item_id:'',producto_id:'',tamano_id:'',destino_tipo:'',destino_aliado_id:'',toneladas:'',cantidad:0,precio_unit:0,aplica_iva:true}); renderLineas(st); };
       st.lineas.forEach((l,i)=>{
         const tSel=box.querySelector('[data-tipo="'+i+'"]'); if(tSel) tSel.onchange=()=>{ cambiarTipo(st,i,tSel.value); renderLineas(st); };
-        const iSel=box.querySelector('[data-item="'+i+'"]'); if(iSel) iSel.onchange=()=>{ aplicarItem(st,i,iSel.value); renderLineas(st); };
+        const iSel=box.querySelector('[data-item="'+i+'"]'); if(iSel) iSel.onchange=()=>{ aplicarArticulo(st,i,iSel.value); renderLineas(st); };
         const tamSel=box.querySelector('[data-tam="'+i+'"]'); if(tamSel) tamSel.onchange=()=>{ st.lineas[i].tamano_id=tamSel.value; recalcTransporte(st,i); renderLineas(st); };
         const dirSel=box.querySelector('[data-dir="'+i+'"]'); if(dirSel) dirSel.onchange=()=>{ st.lineas[i].direccion=dirSel.value; recalcTransporte(st,i); renderLineas(st); };
         const dSel=box.querySelector('[data-dest="'+i+'"]'); if(dSel) dSel.onchange=()=>{ const p=dSel.value.split('|'); st.lineas[i].destino_tipo=p[0]; st.lineas[i].destino_aliado_id=p[1]||''; recalcTransporte(st,i); renderLineas(st); };
@@ -390,11 +402,11 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   async function guardar(st){
     if(!st.obra_id){ ctx.toast('Selecciona el cliente y la obra.','error'); return; }
     for(const l of st.lineas){
-      if(l.tipo==='item' && !l.item_id){ ctx.toast('En una linea de item falta elegir el item.','error'); return; }
+      if(l.tipo==='item' && !l.cod_articulo){ ctx.toast('En una linea de item falta elegir el producto o servicio.','error'); return; }
       if(l.tipo==='transporte' && !l.tamano_id){ ctx.toast('En una linea de transporte falta elegir el tamano.','error'); return; }
     }
     const btn=el.querySelector('#bGuardar'); if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
-    const lineas=st.lineas.map(l=>({tipo:l.tipo, descripcion:l.descripcion, item_id:l.item_id||'', producto_id:l.producto_id||'', tamano_id:l.tamano_id||'',
+    const lineas=st.lineas.map(l=>({tipo:l.tipo, descripcion:l.descripcion, item_id:l.item_id||'', producto_id:l.producto_id||'', tamano_id:l.tamano_id||'', cod_articulo:l.cod_articulo||'',
       destino_tipo:l.destino_tipo||'', destino_aliado_id:l.destino_aliado_id||'', direccion:l.direccion||'',
       cantidad:+l.cantidad||0, precio_unit:+l.precio_unit||0, aplica_iva:!!l.aplica_iva}));
     try{
