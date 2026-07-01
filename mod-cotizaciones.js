@@ -52,7 +52,8 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
   // ===================== EDITOR =====================
   async function abrirEditor(cotId){
     const st={ id:null, numero:'', cliente_id:'', cliente_nombre:'', obra_id:'', obra:'', comuna_id:'', municipio_id:'', fecha:'', valida_hasta:'',
-               observaciones:'', estado:'borrador', lineas:[], productos:[], items:[], volqs:[], aliados:[], tarifasRec:[], tarifasEnt:[], clientes:[], obrasOpts:[] };
+               observaciones:'', estado:'borrador', lineas:[], productos:[], items:[], volqs:[], aliados:[], tarifasRec:[], tarifasEnt:[], clientes:[], obrasOpts:[],
+               tnsMap:{}, muniSigla:'', zonaSigla:'', ppSigla:'pp' };
     try{ const r=await ctx.rpc('rcd_clientes_lista',{p_gestor_id:ctx.ses.gestor_id}); st.clientes=Array.isArray(r)?r:[]; }catch(e){}
 
     if(cotId){
@@ -75,6 +76,21 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     try{ const r=await ctx.rpc('rcd_items_lista',{p_gestor_id:ctx.ses.gestor_id}); st.items=(Array.isArray(r)?r:[]).filter(x=>x.activo!==false); }catch(e){ st.items=[]; }
     try{ const r=await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); st.volqs=(Array.isArray(r)?r:[]).filter(x=>x.activa!==false); }catch(e){ st.volqs=[]; }
     try{ const r=await ctx.rpc('rcd_aliados_lista',{p_gestor_id:ctx.ses.gestor_id}); st.aliados=(Array.isArray(r)?r:[]).filter(a=>a.activo!==false); }catch(e){ st.aliados=[]; }
+    // --- Sub-paso 4: precios y siglas desde TNS ---
+    st.tnsMap={}; st.muniSigla=''; st.zonaSigla=''; st.ppSigla='pp';
+    try{ const r=await ctx.rpc('rcd_gestor',{p_gestor_id:ctx.ses.gestor_id}); const g=(Array.isArray(r)?r[0]:r)||{}; if(g.sigla_patio_propio) st.ppSigla=(''+g.sigla_patio_propio).trim().toLowerCase(); }catch(e){}
+    try{
+      const cfg=scalar(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{};
+      if(cfg.tiene_credenciales){
+        const tns=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({accion:'traer_materiales',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00'})}).then(x=>x.json());
+        if(tns&&tns.ok){ (tns.materiales||[]).forEach(m=>{ if(m.codigo) st.tnsMap[(''+m.codigo).trim().toLowerCase()]={precio:+m.precio||0,desc:m.descripcion||''}; }); }
+      }
+    }catch(e){}
+    if(st.municipio_id){
+      try{ const r=await ctx.rpc('rcd_municipios_lista',{p_gestor_id:ctx.ses.gestor_id}); const m=(Array.isArray(r)?r:[]).find(x=>x.id===st.municipio_id); if(m) st.muniSigla=(''+(m.sigla||'')).trim().toLowerCase(); }catch(e){}
+      try{ const r=await ctx.rpc('rcd_comunas_lista',{p_municipio_id:st.municipio_id}); const z=(Array.isArray(r)?r:[]).find(x=>x.id===st.comuna_id); if(z) st.zonaSigla=(''+(z.sigla||'')).trim().toLowerCase(); }catch(e){}
+    }
     if(st.municipio_id){
       try{ const r=await ctx.rpc('rcd_tarifas_lista',{p_gestor_id:ctx.ses.gestor_id,p_municipio_id:st.municipio_id,p_direccion:'recoleccion'}); st.tarifasRec=Array.isArray(r)?r:[]; }catch(e){ st.tarifasRec=[]; }
       try{ const r=await ctx.rpc('rcd_tarifas_lista',{p_gestor_id:ctx.ses.gestor_id,p_municipio_id:st.municipio_id,p_direccion:'entrega'}); st.tarifasEnt=Array.isArray(r)?r:[]; }catch(e){ st.tarifasEnt=[]; }
@@ -262,19 +278,26 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
     l.item_id=item_id; l.descripcion=it?it.nombre:''; l.precio_unit=it?(+it.precio_t||0):0;
     l.producto_id=(it&&it.clase==='producto')?(it.producto_id||''):'';
   }
+  function siglaAliado(n){ return (n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').slice(0,3); }
+  function patioSiglaDe(st,l){
+    if((l.destino_tipo||'nuestro')==='nuestro') return st.ppSigla||'pp';
+    const a=(st.aliados||[]).find(x=>x.id===l.destino_aliado_id);
+    return a?siglaAliado(a.razon_social):'';
+  }
   function recalcTransporte(st,i){
     const l=st.lineas[i];
     const vq=(st.volqs||[]).find(x=>x.id===l.tamano_id), cap=vq?(+vq.capacidad_t||0):0;
     const ton=parseNum(l.toneladas)||0;
     l.cantidad=(cap>0 && ton>0)?Math.ceil(ton/cap):0;
-    const set=(l.direccion==='entrega')?(st.tarifasEnt||[]):(st.tarifasRec||[]);
-    const t=set.find(x=> x.tamano_id===l.tamano_id
-        && ((x.comuna_id||'')===(st.comuna_id||''))
-        && x.destino_tipo===(l.destino_tipo||'nuestro')
-        && ((x.destino_aliado_id||'')===(l.destino_aliado_id||'')) );
-    l.precio_unit=t?(+t.precio_cliente||0):0;
+    // Armar el codigo TNS: municipio-zona-tTamano-patio (muni y zona salen de la obra)
+    const ps=patioSiglaDe(st,l);
+    const code=(st.muniSigla||'')+'-'+(st.zonaSigla||'')+'-t'+Math.round(cap||0)+'-'+ps;
+    l.tns_code=code;
+    const hit=(st.tnsMap&&cap>0)?st.tnsMap[code]:null;
+    l.precio_unit=hit?(+hit.precio||0):0;
+    l.tns_falta=(cap>0 && !hit);
     const dl=destinosDe(st).find(d=>d.tipo===(l.destino_tipo||'nuestro') && (d.aliado||'')===(l.destino_aliado_id||''));
-    const sent=(l.direccion==='entrega')?'Entrega':'Recoleccion';
+    const sent=(l.direccion==='entrega')?'Despacho':'Recoleccion';
     l.descripcion=sent+' '+(vq?vq.nombre:'')+(dl?(' -> '+dl.label):'');
   }
   function updateRowTransport(st,i){
@@ -299,7 +322,9 @@ window.RCD_MODULOS.cotizaciones = function(el, ctx){
           '<input class="cellnum" data-ton="'+i+'" placeholder="Toneladas" value="'+(l.toneladas!==''&&l.toneladas!=null?numEs(l.toneladas):'')+'" style="width:120px">'+
           '</div>';
       cant = (dis?'':'<span style="font-size:11px;color:var(--muted)">viajes </span>')+'<span class="mono" data-cantv="'+i+'">'+numEs(l.cantidad||0)+'</span>';
-      prec = '<span class="mono" data-precv="'+i+'">'+money(l.precio_unit)+'</span>';
+      prec = '<div style="text-align:right;line-height:1.4"><span class="mono" data-precv="'+i+'">'+money(l.precio_unit)+'</span>'+
+             (l.tns_code&&l.tamano_id?'<div class="mono" style="font-size:10px;color:var(--muted)">'+esc(l.tns_code)+'</div>':'')+
+             (l.tns_falta?'<div style="font-size:10px;color:#993C1D">sin precio en TNS</div>':'')+'</div>';
     } else {
       detalle = dis ? esc(l.descripcion||'')
         : '<select data-item="'+i+'"><option value="">Item...</option>'+(st.items||[]).map(p=>'<option value="'+p.id+'"'+(l.item_id===p.id?' selected':'')+'>'+esc(p.nombre)+(p.clase==='producto'?' (producto)':'')+'</option>').join('')+'</select>';
