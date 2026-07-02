@@ -49,21 +49,22 @@ window.RCD_MODULOS.clientes = function(el, ctx){
     const nuevo=!c;
     el.innerHTML=
       '<div class="mcard" style="max-width:760px">'+
-      '<h3 style="margin-top:0">'+(nuevo?'Nuevo cliente':'Editar cliente')+'</h3>'+
-      '<div class="field"><label>Nombre o razon social</label><input id="c_razon" value="'+(nuevo?'':esc(c.razon_social))+'"></div>'+
+      '<h3 style="margin-top:0">Editar cliente</h3>'+
+      '<div class="note" style="margin-bottom:10px">La identidad viene de TNS (solo lectura). Se actualiza al clasificar el tercero en la pestana Terceros.</div>'+
+      '<div class="field"><label>Nombre o razon social <span style="color:#8A8A82;font-weight:400">&middot; TNS</span></label><input id="c_razon" value="'+esc(c.razon_social||'')+'" readonly style="background:#F0F0EC"></div>'+
       '<div class="row2">'+
-        '<div class="field"><label>Documento / NIT</label><input id="c_nit" value="'+(nuevo?'':esc(c.nit||''))+'"></div>'+
-        '<div class="field"><label>Representante legal</label><input id="c_rep" value="'+(nuevo?'':esc(c.rep_legal||''))+'"></div>'+
+        '<div class="field"><label>Documento / NIT <span style="color:#8A8A82;font-weight:400">&middot; TNS</span></label><input id="c_nit" value="'+esc(c.nit||'')+'" readonly style="background:#F0F0EC"></div>'+
+        '<div class="field"><label>Representante legal <span style="color:#8A8A82;font-weight:400">&middot; TNS</span></label><input id="c_rep" value="'+esc(c.rep_legal||'')+'" readonly style="background:#F0F0EC"></div>'+
       '</div>'+
       '<div class="row2">'+
-        '<div class="field"><label>Nombre de contacto</label><input id="c_contacto" value="'+(nuevo?'':esc(c.contacto||''))+'"></div>'+
-        '<div class="field"><label>Telefono</label><input id="c_tel" value="'+(nuevo?'':esc(c.telefono||''))+'"></div>'+
+        '<div class="field"><label>Nombre de contacto</label><input id="c_contacto" value="'+esc(c.contacto||'')+'"></div>'+
+        '<div class="field"><label>Telefono <span style="color:#8A8A82;font-weight:400">&middot; TNS</span></label><input id="c_tel" value="'+esc(c.telefono||'')+'" readonly style="background:#F0F0EC"></div>'+
       '</div>'+
       '<div class="row2">'+
-        '<div class="field"><label>Correo</label><input id="c_correo" value="'+(nuevo?'':esc(c.correo||''))+'"></div>'+
-        '<div class="field"><label>Direccion (domicilio)</label><input id="c_dir" value="'+(nuevo?'':esc(c.direccion||''))+'"></div>'+
+        '<div class="field"><label>Correo <span style="color:#8A8A82;font-weight:400">&middot; TNS</span></label><input id="c_correo" value="'+esc(c.correo||'')+'" readonly style="background:#F0F0EC"></div>'+
+        '<div class="field"><label>Direccion (domicilio) <span style="color:#8A8A82;font-weight:400">&middot; TNS</span></label><input id="c_dir" value="'+esc(c.direccion||'')+'" readonly style="background:#F0F0EC"></div>'+
       '</div>'+
-      (nuevo?'':'<div class="field"><label>Estado</label><select id="c_activo"><option value="true"'+(c.activo?' selected':'')+'>Activo</option><option value="false"'+(!c.activo?' selected':'')+'>Inactivo</option></select></div>')+
+      '<div class="field"><label>Estado</label><select id="c_activo"><option value="true"'+(c.activo?' selected':'')+'>Activo</option><option value="false"'+(!c.activo?' selected':'')+'>Inactivo</option></select></div>'+
       '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>'+
       '</div>';
     el.querySelector('#bCancel').onclick=lista;
