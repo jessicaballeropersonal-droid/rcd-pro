@@ -15,14 +15,48 @@ window.RCD_MODULOS.precios = function(el, ctx){
       '<button class="tab'+(activa==='ar'?' active':'')+'" data-t="ar">Artículos</button>'+
       '<button class="tab'+(activa==='it'?' active':'')+'" data-t="it">Productos y servicios</button>'+
       '<button class="tab'+(activa==='mu'?' active':'')+'" data-t="mu">Municipios (transporte)</button>'+
+      '<button class="tab'+(activa==='maq'?' active':'')+'" data-t="maq">Maquila</button>'+
       '</div>';
   }
-  function wireTabs(){ el.querySelectorAll('.tab[data-t]').forEach(function(b){ b.onclick=function(){ var t=b.dataset.t; if(t==='ar') articulosView(); else if(t==='it') itemsView(); else muniList(); }; }); }
+  function wireTabs(){ el.querySelectorAll('.tab[data-t]').forEach(function(b){ b.onclick=function(){ var t=b.dataset.t; if(t==='ar') articulosView(); else if(t==='it') itemsView(); else if(t==='maq') maquilaView(); else muniList(); }; }); }
 
   async function cargarCat(){
     if(!MUNIS.length){ try{ const r=await ctx.rpc('rcd_municipios_lista',{p_gestor_id:ctx.ses.gestor_id}); MUNIS=Array.isArray(r)?r:[]; }catch(e){} }
     if(!VOLQS.length){ try{ const r=await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); VOLQS=(Array.isArray(r)?r:[]).filter(x=>x.activa!==false); }catch(e){} }
     if(!ALIADOS.length){ try{ const r=await ctx.rpc('rcd_aliados_lista',{p_gestor_id:ctx.ses.gestor_id}); ALIADOS=(Array.isArray(r)?r:[]).filter(a=>a.activo!==false); }catch(e){} }
+  }
+
+  async function maquilaView(){
+    el.innerHTML='<div class="loading">Cargando...</div>';
+    ALIADOS=[]; await cargarCat();
+    const maqs=(ALIADOS||[]).filter(a=>a.es_maquila);
+    const pEditar=ctx.can('aliados','editar');
+    el.innerHTML='<div class="mcard" style="max-width:920px">'+tabbar('maq')+
+      '<h3 style="margin-top:0">Precio de maquila</h3>'+
+      '<p class="lead">Costo por tonelada que te cobra cada maquila por procesar el RCD. Es el valor por defecto en cada envio. Los aliados maquila se definen en Clientes &rarr; Terceros.</p>'+
+      (maqs.length
+        ? '<table class="mtable"><tr><th>Maquila</th><th>Municipio</th><th style="text-align:right">Precio ($/t)</th>'+(pEditar?'<th></th>':'')+'</tr>'+
+          maqs.map((a,i)=>'<tr><td><b>'+esc(a.razon_social)+'</b></td><td>'+esc(a.municipio||'')+'</td>'+
+            '<td style="text-align:right">'+(pEditar?'<input class="cellnum" data-precio="'+i+'" style="width:130px;text-align:right" value="'+numEs(a.precio_maquila_t||0)+'">':numEs(a.precio_maquila_t||0))+'</td>'+
+            (pEditar?'<td><button class="btn ghost sm" data-save="'+i+'">Guardar</button></td>':'')+'</tr>').join('')+'</table>'
+        : '<div class="empty">No hay aliados maquila. Clasifica un tercero como Maquila en Clientes &rarr; Terceros.</div>')+
+      '</div>';
+    wireTabs();
+    if(pEditar) el.querySelectorAll('[data-save]').forEach(b=>{ b.onclick=async function(){
+      const i=+b.dataset.save, a=maqs[i];
+      const nuevo=parseNum(el.querySelector('[data-precio="'+i+'"]').value)||0;
+      b.disabled=true;
+      try{ const r=scalar(await ctx.rpc('rcd_aliado_guardar',{
+          p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:a.id,
+          p_razon:a.razon_social||'', p_nit:a.nit||'', p_rep:a.rep_legal||'', p_direccion:a.direccion||'',
+          p_telefono:a.telefono||'', p_correo:a.correo||'', p_municipio:a.municipio||'',
+          p_inscripcion:a.numero_inscripcion||'', p_es_maquila:!!a.es_maquila, p_es_receptor:!!a.es_receptor,
+          p_precio:nuevo }));
+        if(r==='OK'){ a.precio_maquila_t=nuevo; ctx.toast('Precio guardado.'); }
+        else ctx.toast('No se pudo guardar ('+(r||'error')+').','error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      b.disabled=false;
+    }; });
   }
   function destinos(){
     const d=[{tipo:'nuestro',aliado:null,label:'Nuestro RCD'}];
