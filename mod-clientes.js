@@ -236,7 +236,7 @@ async function terceros(body, ctx){
     const c=map[key]||{};
     return { key:key, codigo:t.codigo||'', nit:t.nit||'', nombre:t.nombre||'(sin nombre)',
       naturaleza:t.natJuridica||'', ciudad:t.nombreCiudad||'', telefono:t.telefono||'',
-      es_cliente:!!c.es_cliente, es_transporte:!!c.es_transporte, es_maquila:!!c.es_maquila };
+      es_cliente:!!c.es_cliente, es_transporte:!!c.es_transporte, es_maquila:!!c.es_maquila, es_receptor:!!c.es_receptor };
   }).filter(d=>d.key);
 
   const now=new Date();
@@ -260,6 +260,7 @@ async function terceros(body, ctx){
           '<option value="cliente">Clientes</option>'+
           '<option value="transporte">Transporte</option>'+
           '<option value="maquila">Maquila</option>'+
+          '<option value="receptor">Receptor</option>'+
         '</select>'+
         '<span id="tCount" style="font-size:12px;color:#6E7A77;white-space:nowrap"></span>'+
       '</div>'+
@@ -271,10 +272,11 @@ async function terceros(body, ctx){
   }
 
   function pasa(d){
-    if(fFiltro==='sin' && (d.es_cliente||d.es_transporte||d.es_maquila)) return false;
+    if(fFiltro==='sin' && (d.es_cliente||d.es_transporte||d.es_maquila||d.es_receptor)) return false;
     if(fFiltro==='cliente' && !d.es_cliente) return false;
     if(fFiltro==='transporte' && !d.es_transporte) return false;
     if(fFiltro==='maquila' && !d.es_maquila) return false;
+    if(fFiltro==='receptor' && !d.es_receptor) return false;
     if(fSearch){
       const q=fSearch.toLowerCase().replace(/\./g,'');
       const hay=((d.nombre||'')+' '+(d.nit||'')).toLowerCase().replace(/\./g,'');
@@ -294,6 +296,7 @@ async function terceros(body, ctx){
     if(d.es_cliente) eff.push('Cotizaciones + acceso cliente (NIT, 0000)');
     if(d.es_transporte) eff.push('Volqueteros + acceso proveedor (doc, 0000)');
     if(d.es_maquila) eff.push('Aliados + acceso proveedor (doc, 0000)');
+    if(d.es_receptor) eff.push('Aliados receptor (Anexo VI)');
     return '<div style="background:#fff;border:1px solid var(--line,#E0E0DA);border-radius:8px;padding:11px 13px;margin-bottom:8px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
           '<div style="min-width:0"><b>'+esc(d.nombre)+'</b><br>'+
@@ -301,7 +304,7 @@ async function terceros(body, ctx){
             (d.naturaleza?' <span style="font-size:12px;color:#6E7A77">&middot; '+esc(d.naturaleza)+'</span>':'')+
             (d.ciudad?' <span style="font-size:12px;color:#6E7A77">&middot; '+esc(d.ciudad)+'</span>':'')+
           '</div>'+
-          '<div style="display:flex;gap:6px">'+chip('Cliente','cliente',d.key,d.es_cliente)+chip('Transporte','transporte',d.key,d.es_transporte)+chip('Maquila','maquila',d.key,d.es_maquila)+'</div>'+
+          '<div style="display:flex;gap:6px">'+chip('Cliente','cliente',d.key,d.es_cliente)+chip('Transporte','transporte',d.key,d.es_transporte)+chip('Maquila','maquila',d.key,d.es_maquila)+chip('Receptor','receptor',d.key,d.es_receptor)+'</div>'+
         '</div>'+
         (eff.length?'<div style="font-size:11.5px;color:#6E7A77;margin-top:8px">&rarr; '+esc(eff.join('   &middot;   '))+'</div>':'')+
       '</div>';
@@ -309,7 +312,7 @@ async function terceros(body, ctx){
 
   function renderRows(){
     const cont=body.querySelector('#tRows');
-    const done=DATA.filter(d=>d.es_cliente||d.es_transporte||d.es_maquila).length;
+    const done=DATA.filter(d=>d.es_cliente||d.es_transporte||d.es_maquila||d.es_receptor).length;
     const cEl=body.querySelector('#tCount'); if(cEl) cEl.textContent=DATA.length+' terceros · '+done+' clasificados';
     const vis=DATA.filter(pasa);
     if(!vis.length){ cont.innerHTML='<div class="empty">Sin resultados.</div>'; return; }
@@ -320,17 +323,17 @@ async function terceros(body, ctx){
   async function toggle(key,k){
     if(!puedeEditar){ ctx.toast('No tienes permiso para clasificar.','error'); return; }
     const d=DATA.find(x=>x.key===key); if(!d) return;
-    const field = k==='cliente'?'es_cliente':(k==='transporte'?'es_transporte':'es_maquila');
+    const field = k==='cliente'?'es_cliente':(k==='transporte'?'es_transporte':(k==='maquila'?'es_maquila':'es_receptor'));
     d[field]=!d[field];
     try{
       const res=scalar(await ctx.rpc('rcd_tercero_clasif_guardar',{
         p_gestor_id:ctx.ses.gestor_id, p_usuario_id:ctx.ses.id,
         p_cod_tercero:d.key, p_nit:d.nit, p_nombre:d.nombre, p_naturaleza:d.naturaleza,
         p_ciudad:d.ciudad, p_telefono:d.telefono,
-        p_es_cliente:d.es_cliente, p_es_transporte:d.es_transporte, p_es_maquila:d.es_maquila
+        p_es_cliente:d.es_cliente, p_es_transporte:d.es_transporte, p_es_maquila:d.es_maquila, p_es_receptor:d.es_receptor
       }));
       if(res!=='OK'){ d[field]=!d[field]; ctx.toast(res==='SIN_COD'?'Tercero sin codigo TNS.':'No se pudo guardar.','error'); }
-      else { ctx.toast('Clasificacion guardada.'); if(ctx.log) ctx.log('Clientes','Clasificar tercero', d.nombre+' ['+(d.es_cliente?'C':'')+(d.es_transporte?'T':'')+(d.es_maquila?'M':'')+']'); }
+      else { ctx.toast('Clasificacion guardada.'); if(ctx.log) ctx.log('Clientes','Clasificar tercero', d.nombre+' ['+(d.es_cliente?'C':'')+(d.es_transporte?'T':'')+(d.es_maquila?'M':'')+(d.es_receptor?'R':'')+']'); }
     }catch(e){ d[field]=!d[field]; ctx.toast('Error de conexion al guardar.','error'); }
     renderRows();
   }
