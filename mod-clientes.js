@@ -330,7 +330,7 @@ async function terceros(body, ctx){
         p_es_cliente:d.es_cliente, p_es_transporte:d.es_transporte, p_es_maquila:d.es_maquila
       }));
       if(res!=='OK'){ d[field]=!d[field]; ctx.toast(res==='SIN_COD'?'Tercero sin codigo TNS.':'No se pudo guardar.','error'); }
-      else if(ctx.log){ ctx.log('Parametros','Clasificar tercero', d.nombre+' ['+(d.es_cliente?'C':'')+(d.es_transporte?'T':'')+(d.es_maquila?'M':'')+']'); }
+      else { ctx.toast('Clasificacion guardada.'); if(ctx.log) ctx.log('Clientes','Clasificar tercero', d.nombre+' ['+(d.es_cliente?'C':'')+(d.es_transporte?'T':'')+(d.es_maquila?'M':'')+']'); }
     }catch(e){ d[field]=!d[field]; ctx.toast('Error de conexion al guardar.','error'); }
     renderRows();
   }
