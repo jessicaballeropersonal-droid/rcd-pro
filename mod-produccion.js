@@ -288,6 +288,8 @@ window.RCD_MODULOS.produccion = function(el, ctx){
   async function procesados(){
     el.innerHTML='<div class="loading">Cargando...</div>';
     let rows=[]; try{ const r=await ctx.rpc('rcd_maquila_procesados_lista',{p_gestor_id:ctx.ses.gestor_id,p_estado:''}); rows=Array.isArray(r)?r:[]; }catch(e){}
+    let envios=[]; try{ const r=await ctx.rpc('rcd_maquila_envios_lista',{p_gestor_id:ctx.ses.gestor_id}); envios=Array.isArray(r)?r:[]; }catch(e){}
+    await cargarCatalogos(); const APR=PRODUCTOS.filter(p=>p.es_aprovechado);
     const rep=rows.filter(r=>r.estado==='reportado'), conf=rows.filter(r=>r.estado==='confirmado');
     const money=n=>'$ '+Math.round(+n||0).toLocaleString('es-CO');
     const puede=ctx.can('produccion','editar');
@@ -295,6 +297,18 @@ window.RCD_MODULOS.produccion = function(el, ctx){
       '<div class="mcard" style="max-width:820px">'+
       '<h3 style="margin:0 0 4px">Procesados reportados</h3>'+
       '<p class="lead" style="margin:0 0 12px">Lo que las maquilas reportan como procesado. Al confirmar, se vuelve liquidacion (costo = toneladas × precio de maquila).</p>'+
+      (puede?
+        '<div style="background:#FAFAF8;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:14px">'+
+        '<div style="font-size:13px;font-weight:700;margin-bottom:8px">Registrar procesado (lo que reporto la maquila)</div>'+
+        '<div class="row2"><div class="field" style="margin:0"><label>Envio</label><select id="rp_envio"><option value="">Selecciona...</option>'+
+          envios.map(e=>'<option value="'+esc(e.id)+'">'+esc(e.numero)+' · '+esc(e.aliado)+'</option>').join('')+'</select></div>'+
+          '<div class="field" style="margin:0"><label>Material aprovechado</label><select id="rp_mat"><option value="">Selecciona...</option>'+
+          APR.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.nombre)+'</option>').join('')+'</select></div></div>'+
+        '<div class="row2" style="margin-top:8px"><div class="field" style="margin:0"><label>Toneladas procesadas</label><input id="rp_ton" class="cellnum"></div>'+
+          '<div class="field" style="margin:0"><label>Fecha</label><input id="rp_fecha" type="date"></div></div>'+
+        '<button class="btn primary sm" id="rp_save" style="margin-top:10px">Registrar</button>'+
+        '</div>'
+        : '')+
       '<div style="font-size:13px;font-weight:700;color:var(--esc-d);margin:8px 0 6px">Por confirmar ('+rep.length+')</div>'+
       (rep.length?
         '<table class="mtable"><tr><th>Envio</th><th>Maquila</th><th>Material</th><th style="text-align:right">Toneladas</th><th>Fecha</th>'+(puede?'<th></th>':'')+'</tr>'+
@@ -308,6 +322,17 @@ window.RCD_MODULOS.produccion = function(el, ctx){
         : '<div class="empty">Sin confirmados todavia.</div>')+
       '</div>';
     if(puede){
+      const bs=el.querySelector('#rp_save');
+      if(bs) bs.onclick=async function(){
+        const env=v(el,'rp_envio'), mat=v(el,'rp_mat'), ton=parseNum(v(el,'rp_ton'));
+        if(!env){ ctx.toast('Selecciona el envio.','error'); return; }
+        if(!(ton>0)){ ctx.toast('Escribe las toneladas.','error'); return; }
+        bs.disabled=true;
+        try{ const r=scalar(await ctx.rpc('rcd_maquila_procesado_crear',{p_gestor_id:ctx.ses.gestor_id,p_produccion_id:env,p_producto_id:mat||null,p_toneladas:ton,p_fecha:v(el,'rp_fecha')||null}));
+          if(r==='OK'){ ctx.toast('Procesado registrado'); procesados(); return; }
+          ctx.toast(r==='ENVIO_INVALIDO'?'Envio invalido.':(r==='CANTIDAD_INVALIDA'?'Cantidad invalida.':'No se pudo.'),'error'); bs.disabled=false;
+        }catch(e){ ctx.toast('Error de conexion.','error'); bs.disabled=false; }
+      };
       el.querySelectorAll('[data-conf]').forEach(b=>b.onclick=async function(){
         b.disabled=true;
         try{ const r=scalar(await ctx.rpc('rcd_maquila_procesado_confirmar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:b.dataset.conf}));
