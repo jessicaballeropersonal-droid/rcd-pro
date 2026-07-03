@@ -18,15 +18,17 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
     el.innerHTML=
       '<div style="max-width:920px">'+
       '<h2 style="font-size:20px;font-weight:800;margin:0 0 2px">Liquidacion</h2>'+
-      '<p class="lead" style="margin:0 0 14px">Cobros a clientes (lo que facturas) y pagos a volqueteros (lo que les pagas).</p>'+
+      '<p class="lead" style="margin:0 0 14px">Cobros a clientes, pagos a volqueteros y pagos a maquilas.</p>'+
       '<div style="display:flex;gap:8px;margin-bottom:14px">'+
         '<button class="btn '+(side==='cob'?'primary':'ghost')+'" id="sCob" style="flex:1">Cobros a clientes</button>'+
         '<button class="btn '+(side==='vol'?'primary':'ghost')+'" id="sVol" style="flex:1">Pago a volqueteros</button>'+
+        '<button class="btn '+(side==='maq'?'primary':'ghost')+'" id="sMaq" style="flex:1">Pago a maquilas</button>'+
       '</div>'+
       '<div id="liqBody"></div></div>';
     el.querySelector('#sCob').onclick=()=>{ side='cob'; shell(); };
     el.querySelector('#sVol').onclick=()=>{ side='vol'; shell(); };
-    if(side==='cob') cobView('liq'); else volView('liq');
+    el.querySelector('#sMaq').onclick=()=>{ side='maq'; shell(); };
+    if(side==='cob') cobView('liq'); else if(side==='vol') volView('liq'); else maqView();
   }
   function body(){ return el.querySelector('#liqBody'); }
   function tabbar(tabs,activa,fn){
@@ -34,6 +36,19 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
     b.innerHTML=tabs.map(t=>'<button class="tab'+(t.k===activa?' active':'')+'" data-k="'+t.k+'">'+t.n+'</button>').join('');
     b.querySelectorAll('.tab').forEach(x=>x.onclick=()=>fn(x.dataset.k));
     return b;
+  }
+
+  async function maqView(){
+    const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
+    let rows=[]; try{ const r=await ctx.rpc('rcd_maquila_costos',{p_gestor_id:ctx.ses.gestor_id}); rows=Array.isArray(r)?r:[]; }catch(e){}
+    const total=rows.reduce((a,r)=>a+(+r.costo_total||0),0);
+    bd.innerHTML=
+      '<p class="lead" style="margin:0 0 12px">Lo que le debes a cada maquila por procesar RCD aprovechable (costo de los envios).</p>'+
+      (rows.length?
+        '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Envios</th><th style="text-align:right">Costo total</th></tr>'+
+        rows.map(r=>'<tr><td><b>'+esc(r.aliado)+'</b></td><td class="mono" style="text-align:right">'+numEs(r.envios)+'</td><td class="mono" style="text-align:right">'+money(r.costo_total)+'</td></tr>').join('')+
+        '<tr><td><b>Total</b></td><td></td><td class="mono" style="text-align:right;font-weight:700">'+money(total)+'</td></tr></table>'
+        : '<div class="empty">Sin envios a maquila con costo todavia.</div>');
   }
 
   // ===================== COBROS =====================
