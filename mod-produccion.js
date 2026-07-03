@@ -195,7 +195,7 @@ window.RCD_MODULOS.produccion = function(el, ctx){
       const precio=a?(+a.precio_maquila_t||0):0, costo=precio*totalTons();
       el.innerHTML=
         '<div class="mcard" style="max-width:760px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3 style="margin:0 0 4px">Envio a maquila</h3><button class="btn ghost sm" id="bLiq">Liquidacion</button></div>'+
+        '<h3 style="margin:0 0 4px">Envio a maquila</h3>'+
         '<p class="lead" style="margin:0 0 12px">Procesa RCD aprovechable en un aliado (con costo) o en tu propio patio (sin costo). Entra X, sale X.</p>'+
         '<div class="row2"><div class="field"><label>Fecha</label><input type="date" id="m_fecha"></div>'+
           '<div class="field"><label>Destino (patio)</label><select id="m_dest">'+
@@ -261,7 +261,6 @@ window.RCD_MODULOS.produccion = function(el, ctx){
         const sx=el.querySelector('[data-sx="'+i+'"]'); if(sx) sx.onclick=function(){ leer(); if(salida.length>1) salida.splice(i,1); else salida[0]={prod:'',cant:''}; render(); };
       });
       el.querySelector('#bSaveM').onclick=guardar;
-      const bl=el.querySelector('#bLiq'); if(bl) bl.onclick=maquilaLiq;
       consumo.forEach((c,i)=>{ if(c.tipo) dispDe(i); });
     }
     async function guardar(){
@@ -282,25 +281,6 @@ window.RCD_MODULOS.produccion = function(el, ctx){
       btn.disabled=false; btn.textContent='Guardar envio';
     }
     render();
-  }
-
-  async function maquilaLiq(){
-    el.innerHTML='<div class="loading">Cargando...</div>';
-    let rows=[]; try{ const r=await ctx.rpc('rcd_maquila_costos',{p_gestor_id:ctx.ses.gestor_id}); rows=Array.isArray(r)?r:[]; }catch(e){}
-    const money=n=>'$ '+Math.round(+n||0).toLocaleString('es-CO');
-    const total=rows.reduce((a,r)=>a+(+r.costo_total||0),0);
-    el.innerHTML=
-      '<div class="mcard" style="max-width:760px">'+
-      '<button class="btn ghost sm" id="bBackM">&larr; Envio a maquila</button>'+
-      '<h3 style="margin:12px 0 4px">Liquidacion de maquila</h3>'+
-      '<p class="lead" style="margin:0 0 12px">Lo que le debes a cada maquila por procesar (costo de los envios).</p>'+
-      (rows.length?
-        '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Envios</th><th style="text-align:right">Costo total</th></tr>'+
-        rows.map(r=>'<tr><td><b>'+esc(r.aliado)+'</b></td><td class="mono" style="text-align:right">'+numEs(r.envios)+'</td><td class="mono" style="text-align:right">'+money(r.costo_total)+'</td></tr>').join('')+
-        '<tr><td><b>Total</b></td><td></td><td class="mono" style="text-align:right;font-weight:700">'+money(total)+'</td></tr></table>'
-        : '<div class="empty">Sin envios a maquila con costo todavia.</div>')+
-      '</div>';
-    el.querySelector('#bBackM').onclick=maquila;
   }
 
   // ===================== DETALLE =====================
