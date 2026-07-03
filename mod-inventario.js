@@ -82,7 +82,7 @@ window.RCD_MODULOS.inventario = function(el, ctx){
       '<h3 style="margin:4px 0 2px">Ajuste manual</h3>'+
       '<p class="lead">Para merma, conteo fisico o correcciones. Queda registrado.</p>'+
       '<div class="field"><label>Clase</label><select id="a_clase">'+
-        '<option value="materia">Materia prima</option><option value="producto">Producto terminado</option><option value="disposicion">Disposicion final</option></select></div>'+
+        '<option value="materia">Materia prima</option><option value="producto">Producto terminado</option><option value="aprovechado">Aprovechado (maquila)</option><option value="disposicion">Disposicion final</option></select></div>'+
       '<div class="row2"><div class="field"><label>Item</label><select id="a_item"></select></div>'+
         '<div class="field"><label>Ubicacion</label><select id="a_ubic">'+optsUbic('planta',false)+'</select></div></div>'+
       '<div class="row2"><div class="field"><label>Movimiento</label><select id="a_signo"><option value="entrada">Entrada (+)</option><option value="salida">Salida (-)</option></select></div>'+
@@ -105,7 +105,8 @@ window.RCD_MODULOS.inventario = function(el, ctx){
       const selClase=el.querySelector('#a_clase'), selItem=el.querySelector('#a_item');
       function pintarItems(){
         const c=selClase.value; let h='<option value="">Selecciona...</option>';
-        if(c==='producto') productos.forEach(p=>h+='<option value="p:'+p.id+'">'+esc(p.nombre)+'</option>');
+        if(c==='producto') productos.filter(p=>!p.es_aprovechado).forEach(p=>h+='<option value="p:'+p.id+'">'+esc(p.nombre)+'</option>');
+        else if(c==='aprovechado') productos.filter(p=>p.es_aprovechado).forEach(p=>h+='<option value="p:'+p.id+'">'+esc(p.nombre)+'</option>');
         else if(c==='materia') aprov.forEach(t=>h+='<option value="t:'+t.id+'">'+esc(t.codigo)+' · '+esc(t.nombre)+'</option>');
         else noaprov.forEach(t=>h+='<option value="t:'+t.id+'">'+esc(t.codigo)+' · '+esc(t.nombre)+'</option>');
         selItem.innerHTML=h;
@@ -116,9 +117,10 @@ window.RCD_MODULOS.inventario = function(el, ctx){
         if(!itm){ ctx.toast('Selecciona el item.','error'); return; }
         const cant=parseNum(v(el,'a_cant')); if(!(cant>0)){ ctx.toast('Escribe la cantidad.','error'); return; }
         const esProd = itm.indexOf('p:')===0; const id=itm.slice(2);
+        const claseSql = (clase==='aprovechado')?'producto':clase;
         btn.disabled=true; btn.textContent='Guardando...';
         try{ const r=scalar(await ctx.rpc('rcd_inv_ajuste_crear',{
-            p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_clase:clase,
+            p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_clase:claseSql,
             p_tipo_residuo_id: esProd?null:id, p_producto_id: esProd?id:null,
             p_ubicacion: v(el,'a_ubic'), p_signo: v(el,'a_signo'), p_cantidad:cant,
             p_motivo: v(el,'a_motivo'), p_observaciones: v(el,'a_obs') }));
