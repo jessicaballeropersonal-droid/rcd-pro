@@ -39,16 +39,63 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
   }
 
   async function maqView(){
-    const bd=body(); bd.innerHTML='<div class="loading">Cargando...</div>';
-    let rows=[]; try{ const r=await ctx.rpc('rcd_maquila_costos',{p_gestor_id:ctx.ses.gestor_id}); rows=Array.isArray(r)?r:[]; }catch(e){}
-    const total=rows.reduce((a,r)=>a+(+r.costo_total||0),0);
+    const bd=body(); bd.innerHTML='<div class="loading">Consultando TNS...</div>';
+    let costos=[]; try{ const r=await ctx.rpc('rcd_maquila_costos',{p_gestor_id:ctx.ses.gestor_id}); costos=Array.isArray(r)?r:[]; }catch(e){}
+    let aliados=[]; try{ const r=await ctx.rpc('rcd_aliados_lista',{p_gestor_id:ctx.ses.gestor_id}); aliados=(Array.isArray(r)?r:[]).filter(a=>a.es_maquila && a.activo!==false); }catch(e){}
+    let cfg={}; try{ cfg=scalarRow(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{}; }catch(e){}
+
+    const costoById={}; costos.forEach(c=>{ costoById[c.aliado_id]=c; });
+    const conCod=aliados.filter(a=>a.cod_tercero);
+    const cById={};
+    if(cfg.tiene_credenciales && conCod.length){
+      try{
+        const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({accion:'traer_cartera',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00',
+            clientes:conCod.map(a=>({cliente_id:a.id,cod_tercero:a.cod_tercero}))})}).then(x=>x.json());
+        if(r&&r.ok) (r.cartera||[]).forEach(x=>{ cById[x.cliente_id]=x; });
+      }catch(e){}
+    }
+
+    const rows=aliados.map(a=>{
+      const tns=cById[a.id]||{}, co=costoById[a.id]||{};
+      const facturas=Array.isArray(tns.facturas)?tns.facturas:[];
+      const facturado=facturas.reduce((s,f)=>s+Math.abs(+f.valor||0),0);
+      return { id:a.id, aliado:a.razon_social, liquidado:+(co.costo_total||0),
+               facturado, saldo:Math.abs(+tns.saldo||0), facturas, tieneCod:!!a.cod_tercero };
+    });
+    const tLiq=rows.reduce((s,r)=>s+r.liquidado,0), tSaldo=rows.reduce((s,r)=>s+r.saldo,0);
+    const hora=new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+
     bd.innerHTML=
-      '<p class="lead" style="margin:0 0 12px">Lo que le debes a cada maquila por procesar RCD aprovechable (costo de los envios).</p>'+
+      '<p class="lead" style="margin:0 0 8px">Lo que le debes a cada maquila. <b>Liquidado</b> = lo que calcula la app · <b>Facturado/Saldo</b> = lo que trae TNS. Los abonos se registran en TNS.</p>'+
+      (!cfg.tiene_credenciales
+        ? '<div class="note warn" style="margin-bottom:8px">TNS sin conectar: solo se muestra lo liquidado por la app.</div>'
+        : '<span class="badge ok" style="margin-bottom:8px;display:inline-block">TNS sincronizado · '+hora+'</span>')+
       (rows.length?
-        '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Envios</th><th style="text-align:right">Costo total</th></tr>'+
-        rows.map(r=>'<tr><td><b>'+esc(r.aliado)+'</b></td><td class="mono" style="text-align:right">'+numEs(r.envios)+'</td><td class="mono" style="text-align:right">'+money(r.costo_total)+'</td></tr>').join('')+
-        '<tr><td><b>Total</b></td><td></td><td class="mono" style="text-align:right;font-weight:700">'+money(total)+'</td></tr></table>'
-        : '<div class="empty">Sin envios a maquila con costo todavia.</div>');
+        '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Liquidado (app)</th><th style="text-align:right">Facturado (TNS)</th><th style="text-align:right">Saldo (TNS)</th><th></th></tr>'+
+        rows.map((r,i)=>
+          '<tr><td><b>'+esc(r.aliado)+'</b>'+(!r.tieneCod?' <span class="badge off" style="font-size:10px">sin cod TNS</span>':'')+'</td>'+
+          '<td class="mono" style="text-align:right">'+money(r.liquidado)+'</td>'+
+          '<td class="mono" style="text-align:right">'+(r.tieneCod?money(r.facturado):'-')+'</td>'+
+          '<td class="mono" style="text-align:right;color:'+(r.saldo>0?'#993C1D':'inherit')+'">'+(r.tieneCod?money(r.saldo):'-')+'</td>'+
+          '<td>'+(r.facturas.length?'<button class="btn ghost sm" data-fac="'+i+'">Facturas</button>':'')+'</td></tr>'+
+          '<tr data-det="'+i+'" style="display:none"><td colspan="5" style="background:#FAFAF8"><div id="facDet'+i+'"></div></td></tr>'
+        ).join('')+
+        '<tr style="font-weight:700"><td>Total</td><td class="mono" style="text-align:right">'+money(tLiq)+'</td><td></td><td class="mono" style="text-align:right">'+money(tSaldo)+'</td><td></td></tr></table>'+
+        '<div class="note" style="margin-top:10px">Si <b>Liquidado</b> es mayor que <b>Facturado</b>, falta que la maquila te facture esa diferencia. El <b>Saldo</b> es lo que queda por pagar (los abonos se hacen en TNS).</div>'
+        : '<div class="empty">No hay maquilas clasificadas. Clasifica un tercero como Maquila en Clientes &rarr; Terceros.</div>');
+
+    rows.forEach((r,i)=>{
+      const b=bd.querySelector('[data-fac="'+i+'"]'); if(!b) return;
+      b.onclick=()=>{
+        const det=bd.querySelector('[data-det="'+i+'"]'), cont=bd.querySelector('#facDet'+i);
+        if(det.style.display==='none'){
+          det.style.display='';
+          cont.innerHTML='<table class="mtable" style="margin:6px 0"><tr><th>Factura</th><th>Fecha</th><th>Vence</th><th style="text-align:right">Valor</th><th style="text-align:right">Saldo</th></tr>'+
+            r.facturas.map(f=>'<tr><td class="mono">'+esc(f.numero||'')+'</td><td class="mono">'+esc(f.fecha||'')+'</td><td class="mono">'+esc(f.fechaVence||'')+'</td><td class="mono" style="text-align:right">'+money(Math.abs(+f.valor||0))+'</td><td class="mono" style="text-align:right">'+money(Math.abs(+f.saldo||0))+'</td></tr>').join('')+'</table>';
+        } else det.style.display='none';
+      };
+    });
   }
 
   // ===================== COBROS =====================
