@@ -11,12 +11,13 @@ window.RCD_MODULOS.produccion = function(el, ctx){
   const rootEl=el;
   rootEl.innerHTML='<div class="tabbar" id="pTabs" style="margin-bottom:12px">'+
     '<button class="tab active" data-t="prod">Produccion</button>'+
-    '<button class="tab" data-t="maq">Maquila</button></div><div id="pBody"></div>';
+    '<button class="tab" data-t="maq">Maquila</button>'+
+    '<button class="tab" data-t="proc">Procesados</button></div><div id="pBody"></div>';
   const pBody=rootEl.querySelector('#pBody');
   el=pBody;
   rootEl.querySelectorAll('#pTabs .tab').forEach(b=>b.onclick=()=>{
     rootEl.querySelectorAll('#pTabs .tab').forEach(x=>x.classList.toggle('active',x===b));
-    if(b.dataset.t==='maq') maquila(); else lista();
+    if(b.dataset.t==='maq') maquila(); else if(b.dataset.t==='proc') procesados(); else lista();
   });
 
   function msg(r){
@@ -281,6 +282,47 @@ window.RCD_MODULOS.produccion = function(el, ctx){
       btn.disabled=false; btn.textContent='Guardar envio';
     }
     render();
+  }
+
+  // ===================== PROCESADOS (reportados por la maquila) =====================
+  async function procesados(){
+    el.innerHTML='<div class="loading">Cargando...</div>';
+    let rows=[]; try{ const r=await ctx.rpc('rcd_maquila_procesados_lista',{p_gestor_id:ctx.ses.gestor_id,p_estado:''}); rows=Array.isArray(r)?r:[]; }catch(e){}
+    const rep=rows.filter(r=>r.estado==='reportado'), conf=rows.filter(r=>r.estado==='confirmado');
+    const money=n=>'$ '+Math.round(+n||0).toLocaleString('es-CO');
+    const puede=ctx.can('produccion','editar');
+    el.innerHTML=
+      '<div class="mcard" style="max-width:820px">'+
+      '<h3 style="margin:0 0 4px">Procesados reportados</h3>'+
+      '<p class="lead" style="margin:0 0 12px">Lo que las maquilas reportan como procesado. Al confirmar, se vuelve liquidacion (costo = toneladas × precio de maquila).</p>'+
+      '<div style="font-size:13px;font-weight:700;color:var(--esc-d);margin:8px 0 6px">Por confirmar ('+rep.length+')</div>'+
+      (rep.length?
+        '<table class="mtable"><tr><th>Envio</th><th>Maquila</th><th>Material</th><th style="text-align:right">Toneladas</th><th>Fecha</th>'+(puede?'<th></th>':'')+'</tr>'+
+        rep.map(r=>'<tr><td class="mono">'+esc(r.produccion_numero||'')+'</td><td>'+esc(r.aliado)+'</td><td>'+esc(r.producto)+'</td><td class="mono" style="text-align:right">'+numEs(r.toneladas)+'</td><td class="mono">'+esc(r.fecha||'')+'</td>'+
+          (puede?'<td style="white-space:nowrap"><button class="btn primary sm" data-conf="'+r.id+'">Confirmar</button> <button class="btn ghost sm" data-rech="'+r.id+'">×</button></td>':'')+'</tr>').join('')+'</table>'
+        : '<div class="empty">Nada por confirmar.</div>')+
+      '<div style="font-size:13px;font-weight:700;color:var(--esc-d);margin:18px 0 6px">Confirmados / liquidados ('+conf.length+')</div>'+
+      (conf.length?
+        '<table class="mtable"><tr><th>Envio</th><th>Maquila</th><th>Material</th><th style="text-align:right">Toneladas</th><th style="text-align:right">Costo</th><th>Factura</th></tr>'+
+        conf.map(r=>'<tr><td class="mono">'+esc(r.produccion_numero||'')+'</td><td>'+esc(r.aliado)+'</td><td>'+esc(r.producto)+'</td><td class="mono" style="text-align:right">'+numEs(r.toneladas)+'</td><td class="mono" style="text-align:right">'+money(r.costo)+'</td><td>'+(r.factura_tns?('<span class="mono">'+esc(r.factura_tns)+'</span>'):'<span class="badge warn" style="font-size:10px">por facturar</span>')+'</td></tr>').join('')+'</table>'
+        : '<div class="empty">Sin confirmados todavia.</div>')+
+      '</div>';
+    if(puede){
+      el.querySelectorAll('[data-conf]').forEach(b=>b.onclick=async function(){
+        b.disabled=true;
+        try{ const r=scalar(await ctx.rpc('rcd_maquila_procesado_confirmar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:b.dataset.conf}));
+          if(r==='OK'){ ctx.toast('Procesado confirmado. Liquidacion generada.'); procesados(); return; }
+          ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo confirmar.','error'); b.disabled=false;
+        }catch(e){ ctx.toast('Error de conexion.','error'); b.disabled=false; }
+      });
+      el.querySelectorAll('[data-rech]').forEach(b=>b.onclick=async function(){
+        if(!(await ctx.confirm('Rechazar este procesado reportado?'))) return;
+        try{ const r=scalar(await ctx.rpc('rcd_maquila_procesado_rechazar',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:b.dataset.rech}));
+          if(r==='OK'){ ctx.toast('Rechazado'); procesados(); return; }
+          ctx.toast('No se pudo.','error');
+        }catch(e){ ctx.toast('Error de conexion.','error'); }
+      });
+    }
   }
 
   // ===================== DETALLE =====================
