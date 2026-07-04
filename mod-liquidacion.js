@@ -57,6 +57,7 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
 
     function tnsBadge(){
       if(!cfg.tiene_credenciales) return '<span class="badge off">TNS sin conectar</span>';
+      if(!conCod.length) return '<span class="badge warn">Ninguna maquila tiene codigo TNS</span>';
       return tnsOk ? '<span class="badge ok">TNS sincronizado · '+tnsHora+'</span>' : '<span class="badge warn">TNS no respondio</span>';
     }
 
@@ -132,12 +133,12 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
         const porFacturar=mine.filter(l=>!l.factura_tns).reduce((s,l)=>s+(+l.costo||0),0);
         const tns=cById[a.id]||{};
         return { aliado:a.razon_social, porFacturar, facturado, saldo:Math.abs(+tns.saldo||0), tieneCod:!!a.cod_tercero };
-      }).filter(r=>r.porFacturar>0 || r.facturado>0 || r.saldo>0 || r.tieneCod);
+      });
       if(!rows.length){ sb.innerHTML='<div class="empty">No hay maquilas clasificadas. Clasifica un tercero como Maquila en Clientes &rarr; Terceros.</div>'; return; }
       const T=k=>rows.reduce((s,r)=>s+r[k],0);
       sb.innerHTML='<p class="lead" style="margin:0 0 12px"><b>Liquidado</b> = lo que falta por facturar (baja al asignar factura) · <b>Facturado</b> = ya asignado a factura de TNS · <b>Saldo TNS</b> = lo que falta pagar.</p>'+
         '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Liquidado</th><th style="text-align:right">Facturado</th><th style="text-align:right">Saldo TNS</th></tr>'+
-        rows.map(r=>'<tr><td><b>'+esc(r.aliado)+'</b></td><td class="mono" style="text-align:right;color:'+(r.porFacturar>0?'#B45309':'inherit')+'">'+money(r.porFacturar)+'</td><td class="mono" style="text-align:right">'+money(r.facturado)+'</td><td class="mono" style="text-align:right;color:'+(r.saldo>0?'#993C1D':'inherit')+'">'+(r.tieneCod?money(r.saldo):'-')+'</td></tr>').join('')+
+        rows.map(r=>'<tr><td><b>'+esc(r.aliado)+'</b>'+(!r.tieneCod?' <span class="badge off" style="font-size:10px">sin cod TNS</span>':'')+'</td><td class="mono" style="text-align:right;color:'+(r.porFacturar>0?'#B45309':'inherit')+'">'+money(r.porFacturar)+'</td><td class="mono" style="text-align:right">'+money(r.facturado)+'</td><td class="mono" style="text-align:right;color:'+(r.saldo>0?'#993C1D':'inherit')+'">'+(r.tieneCod?money(r.saldo):'-')+'</td></tr>').join('')+
         '<tr style="font-weight:700"><td>Total</td><td class="mono" style="text-align:right">'+money(T('porFacturar'))+'</td><td class="mono" style="text-align:right">'+money(T('facturado'))+'</td><td class="mono" style="text-align:right">'+money(T('saldo'))+'</td></tr></table>';
     }
   }
