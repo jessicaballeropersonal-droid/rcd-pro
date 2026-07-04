@@ -121,17 +121,17 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
     function resumen(sb){
       const rows=aliados.map(a=>{
         const mine=liqs.filter(l=>l.aliado_id===a.id);
-        const liquidado=mine.reduce((s,l)=>s+(+l.costo||0),0);
         const facturado=mine.filter(l=>l.factura_tns).reduce((s,l)=>s+(+l.costo||0),0);
+        const porFacturar=mine.filter(l=>!l.factura_tns).reduce((s,l)=>s+(+l.costo||0),0);
         const tns=cById[a.id]||{};
-        return { aliado:a.razon_social, liquidado, facturado, porFacturar:liquidado-facturado, saldo:Math.abs(+tns.saldo||0), tieneCod:!!a.cod_tercero };
-      }).filter(r=>r.liquidado>0 || r.saldo>0);
+        return { aliado:a.razon_social, porFacturar, facturado, saldo:Math.abs(+tns.saldo||0), tieneCod:!!a.cod_tercero };
+      }).filter(r=>r.porFacturar>0 || r.facturado>0 || r.saldo>0);
       if(!rows.length){ sb.innerHTML='<div class="empty">Sin liquidaciones todavia.</div>'; return; }
       const T=k=>rows.reduce((s,r)=>s+r[k],0);
-      sb.innerHTML='<p class="lead" style="margin:0 0 12px">Cruce por maquila: liquidado (app) vs facturado y saldo (TNS).</p>'+
-        '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Liquidado</th><th style="text-align:right">Facturado</th><th style="text-align:right">Por facturar</th><th style="text-align:right">Saldo TNS</th></tr>'+
-        rows.map(r=>'<tr><td><b>'+esc(r.aliado)+'</b></td><td class="mono" style="text-align:right">'+money(r.liquidado)+'</td><td class="mono" style="text-align:right">'+money(r.facturado)+'</td><td class="mono" style="text-align:right;color:'+(r.porFacturar>0?'#B45309':'inherit')+'">'+money(r.porFacturar)+'</td><td class="mono" style="text-align:right;color:'+(r.saldo>0?'#993C1D':'inherit')+'">'+(r.tieneCod?money(r.saldo):'-')+'</td></tr>').join('')+
-        '<tr style="font-weight:700"><td>Total</td><td class="mono" style="text-align:right">'+money(T('liquidado'))+'</td><td class="mono" style="text-align:right">'+money(T('facturado'))+'</td><td class="mono" style="text-align:right">'+money(T('porFacturar'))+'</td><td class="mono" style="text-align:right">'+money(T('saldo'))+'</td></tr></table>';
+      sb.innerHTML='<p class="lead" style="margin:0 0 12px"><b>Liquidado</b> = lo que falta por facturar (baja al asignar factura) · <b>Facturado</b> = ya asignado a factura de TNS · <b>Saldo TNS</b> = lo que falta pagar.</p>'+
+        '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Liquidado</th><th style="text-align:right">Facturado</th><th style="text-align:right">Saldo TNS</th></tr>'+
+        rows.map(r=>'<tr><td><b>'+esc(r.aliado)+'</b></td><td class="mono" style="text-align:right;color:'+(r.porFacturar>0?'#B45309':'inherit')+'">'+money(r.porFacturar)+'</td><td class="mono" style="text-align:right">'+money(r.facturado)+'</td><td class="mono" style="text-align:right;color:'+(r.saldo>0?'#993C1D':'inherit')+'">'+(r.tieneCod?money(r.saldo):'-')+'</td></tr>').join('')+
+        '<tr style="font-weight:700"><td>Total</td><td class="mono" style="text-align:right">'+money(T('porFacturar'))+'</td><td class="mono" style="text-align:right">'+money(T('facturado'))+'</td><td class="mono" style="text-align:right">'+money(T('saldo'))+'</td></tr></table>';
     }
   }
 
