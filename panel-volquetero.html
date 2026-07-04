@@ -29,8 +29,6 @@
   .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
   .field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;-webkit-appearance:none}
   .field input:focus{outline:2px solid var(--orange);border-color:var(--orange)}
-  select{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236E7A77' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 11px center;padding-right:32px}
-  select:focus{outline:2px solid var(--orange);border-color:var(--orange)}
   .enter{width:100%;background:var(--orange);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow';font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
   .enter:hover{background:var(--orange-d)}
   .enter:disabled{opacity:.6;cursor:default}
@@ -112,7 +110,7 @@
 
   <div id="vPanel" class="hidden">
     <div class="appbar">
-      <div class="who"><div class="ava" id="ava">V</div><div><div class="nm" id="nmVolq">Volquetero</div><div class="rl">Portal del volquetero</div></div></div>
+      <div class="who"><div class="ava" id="ava">V</div><div><div class="nm" id="nmVolq">Proveedor</div><div class="rl">Portal del proveedor</div></div></div>
       <button class="salir" onclick="salir()">Salir</button>
     </div>
     <div class="container">
@@ -120,6 +118,7 @@
       <div class="tabbar">
         <div class="tab active" id="tabOfertas" onclick="setTab('ofertas')">Ofertas</div>
         <div class="tab" id="tabViajes" onclick="setTab('viajes')">Mis viajes</div>
+        <div class="tab hidden" id="tabProc" onclick="setTab('procesados')">Procesados</div>
       </div>
       <div id="paneOfertas">
         <div class="secttl">Ofertas disponibles</div>
@@ -128,6 +127,13 @@
       <div id="paneViajes" class="hidden">
         <div class="secttl">Mis viajes en curso</div>
         <div id="viajes"><div class="empty">Cargando...</div></div>
+        <div class="ocard"><button class="bGhost" style="margin:0" onclick="abrirClave()">Cambiar mi clave</button></div>
+      </div>
+      <div id="paneProcesados" class="hidden">
+        <div class="secttl">Envios para procesar</div>
+        <div id="procEnvios"><div class="empty">Cargando...</div></div>
+        <div class="secttl" style="margin-top:16px">Lo que ya reporte</div>
+        <div id="procReportados"><div class="empty">Cargando...</div></div>
         <div class="ocard"><button class="bGhost" style="margin:0" onclick="abrirClave()">Cambiar mi clave</button></div>
       </div>
     </div>
@@ -184,8 +190,13 @@
 
   function mostrarPanel(){
     $('vLogin').classList.add('hidden'); $('vPanel').classList.remove('hidden');
-    $('nmVolq').textContent = ses.nombre || 'Volquetero';
-    $('ava').textContent = (ses.nombre||'V').trim().charAt(0).toUpperCase();
+    $('nmVolq').textContent = ses.nombre || 'Proveedor';
+    $('ava').textContent = (ses.nombre||'P').trim().charAt(0).toUpperCase();
+    var _t = !!ses.es_transporte, _m = !!ses.es_maquila; if(!_t && !_m) _t = true;
+    $('tabOfertas').classList.toggle('hidden', !_t);
+    $('tabViajes').classList.toggle('hidden', !_t);
+    $('tabProc').classList.toggle('hidden', !_m);
+    setTab(_t ? 'ofertas' : 'procesados');
     $('keyWarn').innerHTML = ses.clave_default
       ? '<div style="background:#FFF7E8;border:1px solid #F0D9A8;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#8A5A00;margin-bottom:10px">Estas usando la clave por defecto (0000). Cambiala en "Mis viajes".</div>' : '';
     cargarTodo();
@@ -195,11 +206,53 @@
     tab=t;
     $('tabOfertas').classList.toggle('active', t==='ofertas');
     $('tabViajes').classList.toggle('active', t==='viajes');
+    $('tabProc').classList.toggle('active', t==='procesados');
     $('paneOfertas').classList.toggle('hidden', t!=='ofertas');
     $('paneViajes').classList.toggle('hidden', t!=='viajes');
+    $('paneProcesados').classList.toggle('hidden', t!=='procesados');
   }
 
-  async function cargarTodo(){ cargarOfertas(); cargarViajes(); }
+  async function cargarTodo(){ var _t=!!ses.es_transporte||(!ses.es_maquila); if(_t){ cargarOfertas(); cargarViajes(); } if(ses.es_maquila) cargarProcesados(); }
+
+  async function cargarProcesados(){
+    if(!ses.aliado_id){ $('procEnvios').innerHTML='<div class="empty">Tu cuenta de maquila no esta enlazada (falta codigo TNS). Avisa al administrador.</div>'; $('procReportados').innerHTML=''; return; }
+    try{
+      const envs = await rpc('rcd_maquila_portal_envios', {p_gestor_id:ses.gestor_id, p_aliado_id:ses.aliado_id});
+      const list = Array.isArray(envs)?envs:[];
+      $('procEnvios').innerHTML = list.length ? list.map(cardEnvio).join('') : '<div class="empty">No tienes envios para procesar.</div>';
+      list.forEach(e=>{ const b=$('rep_'+e.id); if(b) b.onclick=()=>reportar(e); });
+    }catch(e){ $('procEnvios').innerHTML='<div class="empty">Error al cargar.</div>'; }
+    try{
+      const rep = await rpc('rcd_maquila_portal_procesados', {p_gestor_id:ses.gestor_id, p_aliado_id:ses.aliado_id});
+      const list = Array.isArray(rep)?rep:[];
+      $('procReportados').innerHTML = list.length ? '<div class="ocard">'+list.map(r=>
+        '<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:13.5px">'+esc(r.produccion_numero||'')+' &middot; '+numFmt(r.toneladas)+' t &middot; '+fmtFecha(r.fecha)+'</span>'+estadoBadge(r.estado)+'</div>').join('')+'</div>' : '<div class="empty">Aun no reportaste nada.</div>';
+    }catch(e){ $('procReportados').innerHTML=''; }
+  }
+  function cardEnvio(e){
+    const rest = Math.max(0, (+e.toneladas||0)-(+e.procesado||0));
+    return '<div class="ocard">'+
+      '<div style="font-weight:700">'+esc(e.numero||'')+' &middot; '+esc(e.material||'')+'</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);margin:2px 0 10px">Enviado '+numFmt(e.toneladas)+' t &middot; Procesado '+numFmt(e.procesado)+' t &middot; Falta '+numFmt(rest)+' t</div>'+
+      '<div class="field" style="margin-bottom:8px"><label>Toneladas procesadas</label><input id="rt_'+e.id+'" inputmode="decimal" placeholder="0"></div>'+
+      '<div class="field" style="margin-bottom:10px"><label>Fecha</label><input id="rf_'+e.id+'" type="date"></div>'+
+      '<button class="bTake" id="rep_'+e.id+'">Reportar procesado</button>'+
+      '</div>';
+  }
+  async function reportar(e){
+    const ton = parseFloat(($('rt_'+e.id).value||'').replace(',','.'))||0;
+    if(!(ton>0)){ toast('Escribe las toneladas', true); return; }
+    const b=$('rep_'+e.id); b.disabled=true; b.textContent='Enviando...';
+    try{
+      const r = await rpc('rcd_maquila_procesado_crear', {p_gestor_id:ses.gestor_id, p_produccion_id:e.id, p_producto_id:null, p_toneladas:ton, p_fecha:($('rf_'+e.id).value||null)});
+      const res = Array.isArray(r)?r[0]:r;
+      if(res==='OK'){ toast('Reportado. Espera la aprobacion.'); cargarProcesados(); return; }
+      toast(res==='ENVIO_INVALIDO'?'Envio invalido':'No se pudo reportar', true);
+    }catch(e2){ toast('Error de conexion', true); }
+    b.disabled=false; b.textContent='Reportar procesado';
+  }
+  function estadoBadge(s){ return s==='confirmado' ? '<span style="color:#15803D;font-weight:700;font-size:13px">Aprobado</span>' : '<span style="color:#B45309;font-size:13px">Pendiente</span>'; }
+  function numFmt(n){ return (Math.round((+n||0)*100)/100).toLocaleString('es-CO'); }
 
   async function cargarOfertas(){
     const box=$('ofertas'); box.innerHTML='<div class="empty">Cargando...</div>';
