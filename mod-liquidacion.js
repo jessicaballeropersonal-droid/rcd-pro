@@ -45,17 +45,24 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
     let aliados=[]; try{ const r=await ctx.rpc('rcd_aliados_lista',{p_gestor_id:ctx.ses.gestor_id}); aliados=(Array.isArray(r)?r:[]).filter(a=>a.es_maquila && a.activo!==false); }catch(e){}
     let cfg={}; try{ cfg=scalarRow(await ctx.rpc('rcd_tns_config_get',{p_gestor_id:ctx.ses.gestor_id}))||{}; }catch(e){}
     const cById={}, conCod=aliados.filter(a=>a.cod_tercero);
+    let tnsOk=false, tnsHora='';
     if(cfg.tiene_credenciales && conCod.length){
       try{ const r=await fetch('/api/tns',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({accion:'traer_cartera',usuario_id:ctx.ses.id,gestor_id:ctx.ses.gestor_id,codigosucursal:cfg.codigo_sucursal||'00',
           clientes:conCod.map(a=>({cliente_id:a.id,cod_tercero:a.cod_tercero}))})}).then(x=>x.json());
-        if(r&&r.ok)(r.cartera||[]).forEach(x=>{cById[x.cliente_id]=x;});
+        if(r&&r.ok){ (r.cartera||[]).forEach(x=>{cById[x.cliente_id]=x;}); tnsOk=true; tnsHora=new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}); }
       }catch(e){}
     }
     render();
 
+    function tnsBadge(){
+      if(!cfg.tiene_credenciales) return '<span class="badge off">TNS sin conectar</span>';
+      return tnsOk ? '<span class="badge ok">TNS sincronizado · '+tnsHora+'</span>' : '<span class="badge warn">TNS no respondio</span>';
+    }
+
     function render(){
-      bd.innerHTML='<div class="tabbar" style="margin-bottom:12px">'+
+      bd.innerHTML='<div style="margin-bottom:10px">'+tnsBadge()+'</div>'+
+        '<div class="tabbar" style="margin-bottom:12px">'+
         [['porfac','Por facturar'],['facturado','Facturado'],['resumen','Resumen']].map(t=>'<button class="tab'+(maqSub===t[0]?' active':'')+'" data-s="'+t[0]+'">'+t[1]+'</button>').join('')+
         '</div><div id="maqSubBody"></div>';
       bd.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{ maqSub=b.dataset.s; render(); });
@@ -125,8 +132,8 @@ window.RCD_MODULOS.liquidacion = function(el, ctx){
         const porFacturar=mine.filter(l=>!l.factura_tns).reduce((s,l)=>s+(+l.costo||0),0);
         const tns=cById[a.id]||{};
         return { aliado:a.razon_social, porFacturar, facturado, saldo:Math.abs(+tns.saldo||0), tieneCod:!!a.cod_tercero };
-      }).filter(r=>r.porFacturar>0 || r.facturado>0 || r.saldo>0);
-      if(!rows.length){ sb.innerHTML='<div class="empty">Sin liquidaciones todavia.</div>'; return; }
+      }).filter(r=>r.porFacturar>0 || r.facturado>0 || r.saldo>0 || r.tieneCod);
+      if(!rows.length){ sb.innerHTML='<div class="empty">No hay maquilas clasificadas. Clasifica un tercero como Maquila en Clientes &rarr; Terceros.</div>'; return; }
       const T=k=>rows.reduce((s,r)=>s+r[k],0);
       sb.innerHTML='<p class="lead" style="margin:0 0 12px"><b>Liquidado</b> = lo que falta por facturar (baja al asignar factura) · <b>Facturado</b> = ya asignado a factura de TNS · <b>Saldo TNS</b> = lo que falta pagar.</p>'+
         '<table class="mtable"><tr><th>Maquila</th><th style="text-align:right">Liquidado</th><th style="text-align:right">Facturado</th><th style="text-align:right">Saldo TNS</th></tr>'+
