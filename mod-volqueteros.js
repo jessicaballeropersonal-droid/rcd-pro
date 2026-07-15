@@ -1,425 +1,175 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RCD Pro · Portal del volquetero</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230F766E'/%3E%3Cpath d='M15 27 Q22.5 21.5 30 27 L30 30 L15 30 Z' fill='%23E8620A'/%3E%3Cpath d='M13 30 L32 30 L32 41 L15 41 Z' fill='%23ffffff'/%3E%3Cpath d='M34 30 L42 30 L46 36 L46 41 L34 41 Z' fill='%23ffffff'/%3E%3Crect x='13' y='41' width='33' height='3' fill='%230B4A45'/%3E%3Ccircle cx='21' cy='45.5' r='4.6' fill='%231A2B27'/%3E%3Ccircle cx='39' cy='45.5' r='4.6' fill='%231A2B27'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#E7E7E3;--surface:#FFFFFF;--ink:#1A2B27;--muted:#6E7A77;--line:#D9E2DF;
-    --esc:#0F766E;--esc-soft:#E2F3F0;--esc-d:#0B4A45;--orange:#E8620A;--orange-d:#B8490A;--bad:#B91C1C;--ok:#0B6B4F;--amber:#854F0B;--amber-soft:#FAEEDA;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;background:radial-gradient(1100px 500px at 50% -10%, #DCEAE7 0%, transparent 60%),var(--bg);
-    color:var(--ink);font-family:'Barlow',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-  .mono{font-family:'JetBrains Mono',monospace}
-  .wraplogin{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-  .card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px rgba(15,118,110,.12);overflow:hidden}
-  .top{background:var(--orange);height:7px}
-  .pad{padding:28px 28px 24px}
-  .brandbox{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:8px}
-  .wordmark{font-weight:900;font-size:34px;letter-spacing:-.02em;color:var(--esc-d);line-height:1}
-  .wordmark b{color:var(--orange)}
-  .sub{font-size:12px;color:var(--muted);margin-top:6px;font-family:'JetBrains Mono',monospace}
-  .field{margin-bottom:14px}
-  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
-  .field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;-webkit-appearance:none}
-  .field input:focus{outline:2px solid var(--orange);border-color:var(--orange)}
-  .enter{width:100%;background:var(--orange);color:#fff;border:none;border-radius:10px;padding:13px;font-family:'Barlow';font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
-  .enter:hover{background:var(--orange-d)}
-  .enter:disabled{opacity:.6;cursor:default}
-  .hint{margin-top:18px;background:var(--amber-soft);border:1px solid #F0D9A8;border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--amber);font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.5}
-  .err{margin-top:14px;background:#FBEAEA;border:1px solid #E7C2C2;border-radius:9px;padding:10px 12px;font-size:12.5px;color:var(--bad);text-align:center;display:none}
-  .err.show{display:block}
-  .hidden{display:none}
-  .appbar{background:var(--surface);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
-  .who{display:flex;align-items:center;gap:10px}
-  .ava{width:36px;height:36px;border-radius:9px;background:#FCEEE4;color:#993C1D;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
-  .who .nm{font-weight:700;font-size:14px;line-height:1.15}
-  .who .rl{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
-  .salir{background:none;border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-family:'Barlow';font-size:13px;color:var(--ink);cursor:pointer}
-  .container{max-width:560px;margin:0 auto;padding:16px}
-  .tabbar{display:flex;gap:6px;margin-bottom:14px}
-  .tab{flex:1;text-align:center;padding:10px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
-  .tab.active{background:var(--esc);color:#fff;border-color:var(--esc)}
-  .secttl{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-family:'JetBrains Mono',monospace;margin:4px 4px 8px}
-  .ocard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:11px}
-  .ocard.mine{border:2px solid #185FA5}
-  .ohead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-  .onum{font-weight:700;font-size:15px}
-  .badge{font-size:11px;padding:2px 9px;border-radius:8px;font-weight:600}
-  .badge.ofer{background:var(--amber-soft);color:var(--amber)}
-  .badge.asig{background:#E6F1FB;color:#0C447C}
-  .badge.ruta{background:var(--amber-soft);color:var(--amber)}
-  .oinfo{font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:10px}
-  .oinfo i{font-size:14px;vertical-align:-2px;margin-right:5px}
-  .bTake{width:100%;background:var(--esc);color:#fff;border:none;height:40px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
-  .bTake:hover{background:var(--esc-d)}
-  .bGo{width:100%;background:var(--orange);color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
-  .bGo:hover{background:var(--orange-d)}
-  .bDone{width:100%;background:var(--ok);color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
-  .bCarga{width:100%;background:#993C1D;color:#fff;border:none;height:42px;border-radius:10px;font-size:14.5px;font-weight:700;cursor:pointer}
-  .bCarga:hover{background:#7a2f16}
-  .fotobox{width:100%;background:var(--esc-soft);border:1px dashed var(--esc);height:84px;border-radius:10px;font-size:13px;color:var(--esc-d);margin-bottom:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer}
-  .fotobox i{font-size:24px;margin-bottom:4px}
-  .fotoprev{width:100%;height:160px;object-fit:cover;border-radius:10px;margin-bottom:12px;display:none}
-  .bGhost{width:100%;margin-top:8px;background:none;border:none;color:var(--esc);font-size:13px;font-weight:600;cursor:pointer}
-  .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
-  .modal{position:fixed;inset:0;background:rgba(20,40,36,.45);display:flex;align-items:center;justify-content:center;padding:24px;z-index:20}
-  .modal .box{background:#fff;border-radius:16px;max-width:360px;width:100%;padding:22px}
-  .modal h3{margin:0 0 14px;font-size:18px}
-  .modal select{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-family:'Barlow';font-size:15px;background:#fff;margin-bottom:8px}
-  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--esc-d);color:#fff;padding:11px 18px;border-radius:10px;font-size:13.5px;z-index:40;opacity:0;transition:opacity .2s;pointer-events:none}
-  .toast.show{opacity:1}
-  .toast.bad{background:var(--bad)}
-</style>
-</head>
-<body>
+// ============================================================
+// RCD PRO · Modulo Volqueteros y vehiculos
+// (usa helpers globales de mod-parametros.js: esc, scalar, v, numEs, parseNum)
+// ============================================================
+window.RCD_MODULOS = window.RCD_MODULOS || {};
 
-  <div id="vLogin" class="wraplogin">
-    <div class="card">
-      <div class="top"></div>
-      <div class="pad">
-        <div class="brandbox">
-          <svg width="62" height="62" viewBox="0 0 64 64" style="margin-bottom:10px" aria-label="RCD Pro">
-            <rect width="64" height="64" rx="15" fill="#0F766E"/>
-            <path d="M15 27 Q22.5 21.5 30 27 L30 30 L15 30 Z" fill="#E8620A"/>
-            <path d="M13 30 L32 30 L32 41 L15 41 Z" fill="#fff"/>
-            <path d="M34 30 L42 30 L46 36 L46 41 L34 41 Z" fill="#fff"/>
-            <path d="M36 32 L41 32 L43.3 35.4 L36 35.4 Z" fill="#0F766E"/>
-            <rect x="13" y="41" width="33" height="3" fill="#0B4A45"/>
-            <circle cx="21" cy="45.5" r="4.6" fill="#1A2B27"/>
-            <circle cx="21" cy="45.5" r="2" fill="#fff"/>
-            <circle cx="39" cy="45.5" r="4.6" fill="#1A2B27"/>
-            <circle cx="39" cy="45.5" r="2" fill="#fff"/>
-          </svg>
-          <div class="wordmark">RCD <b>Pro</b></div><div class="sub">Portal del volquetero</div>
-        </div>
-        <div class="field"><label>Documento (cedula o NIT)</label><input id="inDoc" inputmode="numeric" placeholder="tu numero de documento"></div>
-        <div class="field"><label>Clave</label><input id="inClave" type="password" placeholder="tu clave"></div>
-        <button class="enter" id="bEntrar" onclick="entrar()">Entrar</button>
-        <div class="err" id="loginErr"></div>
-        <div class="hint">Tu clave por defecto es 0000. Podras cambiarla dentro del portal.</div>
-      </div>
-    </div>
-  </div>
+window.RCD_MODULOS.volqueteros = function(el, ctx){
+  const pCrear=ctx.can('volqueteros','escribir'), pEditar=ctx.can('volqueteros','editar'), pEliminar=ctx.can('volqueteros','eliminar');
 
-  <div id="vPanel" class="hidden">
-    <div class="appbar">
-      <div class="who"><div class="ava" id="ava">V</div><div><div class="nm" id="nmVolq">Proveedor</div><div class="rl">Portal del proveedor</div></div></div>
-      <button class="salir" onclick="salir()">Salir</button>
-    </div>
-    <div class="container">
-      <div id="keyWarn"></div>
-      <div class="tabbar">
-        <div class="tab active" id="tabOfertas" onclick="setTab('ofertas')">Ofertas</div>
-        <div class="tab" id="tabViajes" onclick="setTab('viajes')">Mis viajes</div>
-        <div class="tab hidden" id="tabProc" onclick="setTab('procesados')">Procesados</div>
-      </div>
-      <div id="paneOfertas">
-        <div class="secttl">Ofertas disponibles</div>
-        <div id="ofertas"><div class="empty">Cargando...</div></div>
-      </div>
-      <div id="paneViajes" class="hidden">
-        <div class="secttl">Mis viajes en curso</div>
-        <div id="viajes"><div class="empty">Cargando...</div></div>
-        <div class="ocard"><button class="bGhost" style="margin:0" onclick="abrirClave()">Cambiar mi clave</button></div>
-      </div>
-      <div id="paneProcesados" class="hidden">
-        <div class="secttl">Envios para procesar</div>
-        <div id="procEnvios"><div class="empty">Cargando...</div></div>
-        <div class="secttl" style="margin-top:16px">Lo que ya reporte</div>
-        <div id="procReportados"><div class="empty">Cargando...</div></div>
-        <div class="ocard"><button class="bGhost" style="margin:0" onclick="abrirClave()">Cambiar mi clave</button></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="modalRoot"></div>
-  <div id="toast" class="toast"></div>
-
-<script>
-  const SUPABASE_URL  = "https://ymzxjuncantobxeftfqd.supabase.co";
-  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltenhqdW5jYW50b2J4ZWZ0ZnFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMzM0ODUsImV4cCI6MjA5MjgwOTQ4NX0.p1K6pvZy-Agb2J-mKF2MNR5ujrTfRjmvtTyP3QiIzu8";
-  const headers = { 'Content-Type':'application/json', 'apikey':SUPABASE_ANON, 'Authorization':'Bearer '+SUPABASE_ANON };
-  const $ = id => document.getElementById(id);
-  let ses = null, tab='ofertas';
-
-  async function rpc(fn, body){
-    const r = await fetch(SUPABASE_URL+'/rest/v1/rpc/'+fn, {method:'POST', headers, body:JSON.stringify(body||{})});
-    if(!r.ok) throw new Error('rpc '+fn+' '+r.status);
-    return await r.json();
-  }
-  async function subirFoto(file, pref){
-    const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
-    const path=pref+'_'+Date.now()+'.'+ext;
-    const r=await fetch(SUPABASE_URL+'/storage/v1/object/rcd-fotos/'+path,{
-      method:'POST', headers:{'apikey':SUPABASE_ANON,'Authorization':'Bearer '+SUPABASE_ANON,'Content-Type':file.type||'image/jpeg'}, body:file });
-    if(!r.ok) throw new Error('upload '+r.status);
-    return SUPABASE_URL+'/storage/v1/object/public/rcd-fotos/'+path;
-  }
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  function toast(msg, bad){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(bad?' bad':''); setTimeout(()=>t.className='toast',2200); }
-  function loginErr(m){ const e=$('loginErr'); e.textContent=m; e.classList.add('show'); }
-  function fmtFecha(f){ if(!f) return ''; const p=String(f).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):f; }
-  function tipoIcon(t){ return t==='despacho'
-    ? '<i class="ti ti-arrow-down-circle" style="color:#185FA5"></i>Despacho'
-    : '<i class="ti ti-arrow-up-circle" style="color:#993C1D"></i>Recepcion'; }
-
-  async function entrar(){
-    const doc=$('inDoc').value.trim(), clave=$('inClave').value.trim();
-    $('loginErr').classList.remove('show');
-    if(!doc){ loginErr('Escribe tu documento.'); return; }
-    if(!clave){ loginErr('Escribe tu clave.'); return; }
-    $('bEntrar').disabled=true; $('bEntrar').textContent='Entrando...';
-    try{
-      const d = await rpc('rcd_volq_login', {p_doc:doc, p_clave:clave});
-      if(Array.isArray(d) && d.length){
-        ses = d[0]; sessionStorage.setItem('rcd_volq_ses', JSON.stringify(ses));
-        mostrarPanel();
-      } else { loginErr('Documento o clave incorrectos.'); }
-    }catch(e){ loginErr('No se pudo conectar. Revisa tu internet.'); }
-    finally{ $('bEntrar').disabled=false; $('bEntrar').textContent='Entrar'; }
+  function badgeDoc(estado, dias){
+    if(estado==='vigente') return '<span class="badge ok">Vigente</span>';
+    if(estado==='por_vencer') return '<span class="badge warn">Por vencer'+(dias!=null?' ('+dias+'d)':'')+'</span>';
+    if(estado==='vencida') return '<span class="badge danger">Vencida</span>';
+    return '<span class="badge off">Sin fecha</span>';
   }
 
-  function salir(){ sessionStorage.removeItem('rcd_volq_ses'); ses=null; $('vPanel').classList.add('hidden'); $('vLogin').classList.remove('hidden'); $('inClave').value=''; }
-
-  function mostrarPanel(){
-    $('vLogin').classList.add('hidden'); $('vPanel').classList.remove('hidden');
-    $('nmVolq').textContent = ses.nombre || 'Proveedor';
-    $('ava').textContent = (ses.nombre||'P').trim().charAt(0).toUpperCase();
-    var _t = !!ses.es_transporte, _m = !!ses.es_maquila; if(!_t && !_m) _t = true;
-    $('tabOfertas').classList.toggle('hidden', !_t);
-    $('tabViajes').classList.toggle('hidden', !_t);
-    $('tabProc').classList.toggle('hidden', !_m);
-    setTab(_t ? 'ofertas' : 'procesados');
-    $('keyWarn').innerHTML = ses.clave_default
-      ? '<div style="background:#FFF7E8;border:1px solid #F0D9A8;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#8A5A00;margin-bottom:10px">Estas usando la clave por defecto (0000). Cambiala en "Mis viajes".</div>' : '';
-    cargarTodo();
-  }
-
-  function setTab(t){
-    tab=t;
-    $('tabOfertas').classList.toggle('active', t==='ofertas');
-    $('tabViajes').classList.toggle('active', t==='viajes');
-    $('tabProc').classList.toggle('active', t==='procesados');
-    $('paneOfertas').classList.toggle('hidden', t!=='ofertas');
-    $('paneViajes').classList.toggle('hidden', t!=='viajes');
-    $('paneProcesados').classList.toggle('hidden', t!=='procesados');
-  }
-
-  async function cargarTodo(){ var _t=!!ses.es_transporte||(!ses.es_maquila); if(_t){ cargarOfertas(); cargarViajes(); } if(ses.es_maquila) cargarProcesados(); }
-
-  async function cargarProcesados(){
-    if(!ses.aliado_id){ $('procEnvios').innerHTML='<div class="empty">Tu cuenta de maquila no esta enlazada (falta codigo TNS). Avisa al administrador.</div>'; $('procReportados').innerHTML=''; return; }
-    try{
-      const envs = await rpc('rcd_maquila_portal_envios', {p_gestor_id:ses.gestor_id, p_aliado_id:ses.aliado_id});
-      const list = Array.isArray(envs)?envs:[];
-      $('procEnvios').innerHTML = list.length ? list.map(cardEnvio).join('') : '<div class="empty">No tienes envios para procesar.</div>';
-      list.forEach(e=>{ const b=$('rep_'+e.id); if(b) b.onclick=()=>reportar(e); });
-    }catch(e){ $('procEnvios').innerHTML='<div class="empty">Error al cargar.</div>'; }
-    try{
-      const rep = await rpc('rcd_maquila_portal_procesados', {p_gestor_id:ses.gestor_id, p_aliado_id:ses.aliado_id});
-      const list = Array.isArray(rep)?rep:[];
-      $('procReportados').innerHTML = list.length ? '<div class="ocard">'+list.map(r=>
-        '<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)"><span style="font-size:13.5px">'+esc(r.produccion_numero||'')+' &middot; '+numFmt(r.toneladas)+' t &middot; '+fmtFecha(r.fecha)+'</span>'+estadoBadge(r.estado)+'</div>').join('')+'</div>' : '<div class="empty">Aun no reportaste nada.</div>';
-    }catch(e){ $('procReportados').innerHTML=''; }
-  }
-  function cardEnvio(e){
-    const rest = Math.max(0, (+e.toneladas||0)-(+e.procesado||0));
-    return '<div class="ocard">'+
-      '<div style="font-weight:700">'+esc(e.numero||'')+' &middot; '+esc(e.material||'')+'</div>'+
-      '<div style="font-size:12.5px;color:var(--muted);margin:2px 0 10px">Enviado '+numFmt(e.toneladas)+' t &middot; Procesado '+numFmt(e.procesado)+' t &middot; Falta '+numFmt(rest)+' t</div>'+
-      '<div class="field" style="margin-bottom:8px"><label>Toneladas procesadas</label><input id="rt_'+e.id+'" inputmode="decimal" placeholder="0"></div>'+
-      '<div class="field" style="margin-bottom:10px"><label>Fecha</label><input id="rf_'+e.id+'" type="date"></div>'+
-      '<button class="bTake" id="rep_'+e.id+'">Reportar procesado</button>'+
+  // ===== Nivel 1: lista de volqueteros =====
+  async function lista(){
+    el.innerHTML='<div class="loading">Cargando...</div>';
+    let ts=[]; try{ const r=await ctx.rpc('rcd_volqueteros_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) ts=r; }catch(e){}
+    el.innerHTML=
+      '<div class="mcard" style="max-width:900px">'+
+      '<h3 style="margin-top:0">Volqueteros y volquetas</h3>'+
+      '<p class="lead">El titular (transportador) y sus vehiculos, con vigencias de SOAT y tecnomecanica.</p>'+
+      (pCrear?'<div style="margin-bottom:12px"><button class="btn primary sm" id="bNuevo">+ Nuevo volquetero</button></div>':'')+
+      (ts.length?
+        '<table class="mtable"><tr><th>Volquetero</th><th>Documento</th><th>Telefono</th><th>Vehiculos</th><th>Estado</th><th></th></tr>'+
+        ts.map((t,i)=>'<tr><td><b>'+esc(t.nombre)+'</b></td><td class="mono">'+esc(t.documento||'')+'</td>'+
+          '<td class="mono">'+esc(t.telefono||'')+'</td><td class="mono">'+t.n_vehiculos+'</td>'+
+          '<td><span class="badge '+(t.activo?'ok':'off')+'">'+(t.activo?'Activo':'Inactivo')+'</span></td>'+
+          '<td><div class="rowbtns"><button class="btn ghost sm" data-open="'+i+'">Gestionar</button>'+
+          (pEditar?'<button class="btn ghost sm" data-edit="'+i+'">Editar</button>':'')+
+          (pEliminar?'<button class="btn ghost sm" data-anular="'+i+'">Anular</button>':'')+
+          '</div></td></tr>').join('')+'</table>'
+        : '<div class="empty">Aun no hay volqueteros.</div>')+
       '</div>';
-  }
-  async function reportar(e){
-    const ton = parseFloat(($('rt_'+e.id).value||'').replace(',','.'))||0;
-    if(!(ton>0)){ toast('Escribe las toneladas', true); return; }
-    const b=$('rep_'+e.id); b.disabled=true; b.textContent='Enviando...';
-    try{
-      const r = await rpc('rcd_maquila_procesado_crear', {p_gestor_id:ses.gestor_id, p_produccion_id:e.id, p_producto_id:null, p_toneladas:ton, p_fecha:($('rf_'+e.id).value||null)});
-      const res = Array.isArray(r)?r[0]:r;
-      if(res==='OK'){ toast('Reportado. Espera la aprobacion.'); cargarProcesados(); return; }
-      toast(res==='ENVIO_INVALIDO'?'Envio invalido':'No se pudo reportar', true);
-    }catch(e2){ toast('Error de conexion', true); }
-    b.disabled=false; b.textContent='Reportar procesado';
-  }
-  function estadoBadge(s){ return s==='confirmado' ? '<span style="color:#15803D;font-weight:700;font-size:13px">Aprobado</span>' : '<span style="color:#B45309;font-size:13px">Pendiente</span>'; }
-  function numFmt(n){ return (Math.round((+n||0)*100)/100).toLocaleString('es-CO'); }
-
-  async function cargarOfertas(){
-    const box=$('ofertas'); box.innerHTML='<div class="empty">Cargando...</div>';
-    try{
-      const arr = await rpc('rcd_volq_ofertas', {p_volquetero_id:ses.volquetero_id});
-      const ofs = Array.isArray(arr)?arr:[];
-      $('tabOfertas').textContent = 'Ofertas'+(ofs.length?' ('+ofs.length+')':'');
-      if(!ofs.length){ box.innerHTML='<div class="empty">No hay ofertas disponibles ahora.</div>'; return; }
-      box.innerHTML=''; ofs.forEach(o=>box.appendChild(cardOferta(o)));
-    }catch(e){ box.innerHTML='<div class="empty">Error al cargar ofertas.</div>'; }
+    if(pCrear) el.querySelector('#bNuevo').onclick=()=>formVolquetero(null);
+    el.querySelectorAll('[data-open]').forEach(b=>{const i=+b.dataset.open; b.onclick=()=>detalle(ts[i]);});
+    el.querySelectorAll('[data-edit]').forEach(b=>{const i=+b.dataset.edit; b.onclick=()=>formVolquetero(ts[i]);});
+    el.querySelectorAll('[data-anular]').forEach(b=>{const i=+b.dataset.anular; b.onclick=()=>anularVolquetero(ts[i]);});
   }
 
-  function cardOferta(o){
-    const d=document.createElement('div'); d.className='ocard';
-    d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span><span class="badge ofer">Ofertada</span></div>'+
-      '<div class="oinfo">'+tipoIcon(o.tipo)+' · '+esc(o.material||'')+'<br>'+
-      '<i class="ti ti-map-pin"></i>'+esc(o.obra||'')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
-      '<i class="ti ti-truck"></i>Tamano: '+esc(o.tamano||'(cualquiera)')+'</div>'+
-      '<button class="bTake">Tomar este viaje</button>';
-    d.querySelector('.bTake').onclick=()=>tomarOferta(o);
-    return d;
-  }
-
-  async function tomarOferta(o){
-    let vehs=[];
-    try{ vehs = await rpc('rcd_volq_vehiculos', {p_volquetero_id:ses.volquetero_id, p_tamano_id:o.tamano_id}); }catch(e){}
-    vehs = Array.isArray(vehs)?vehs:[];
-    if(!vehs.length){
-      openModal('<h3>Sin vehiculo disponible</h3><p style="font-size:13.5px;color:var(--muted);line-height:1.5;margin:0 0 16px">No tienes un vehiculo libre del tamano '+esc(o.tamano||'')+' (con SOAT y tecnomecanica al dia). Libera otro viaje o revisa tus documentos.</p><button class="bTake" id="mNo">Entendido</button>');
-      $('mNo').onclick=closeModal; return;
-    }
-    openModal('<h3>Tomar '+esc(o.numero||'')+'</h3>'+
-      '<p style="font-size:13px;color:var(--muted);margin:0 0 10px">Elige con cual vehiculo haras este viaje:</p>'+
-      '<select id="selVeh">'+vehs.map(v=>'<option value="'+v.vehiculo_id+'">'+esc(v.placa)+'</option>').join('')+'</select>'+
-      '<div style="display:flex;gap:8px;margin-top:8px"><button class="bTake" id="mOk" style="flex:1">Confirmar</button>'+
-      '<button class="salir" id="mNo" style="flex:0 0 auto">Cancelar</button></div>');
-    $('mNo').onclick=closeModal;
-    $('mOk').onclick=async()=>{
-      const veh=$('selVeh').value; $('mOk').disabled=true; $('mOk').textContent='Tomando...';
-      try{
-        const r = await rpc('rcd_volq_tomar', {p_volquetero_id:ses.volquetero_id, p_orden_id:o.orden_id, p_vehiculo_id:veh});
-        closeModal();
-        if(r==='OK'){ toast('Viaje tomado'); setTab('viajes'); cargarTodo(); }
-        else if(r==='ORDEN_NO_DISPONIBLE'){ toast('Otro volquetero la tomo primero.', true); cargarTodo(); }
-        else if(r==='TAMANO_NO_COINCIDE'){ toast('El vehiculo no es del tamano correcto.', true); }
-        else { toast('No se pudo tomar ('+esc(r)+').', true); }
-      }catch(e){ closeModal(); toast('Error de conexion.', true); }
+  function formVolquetero(t){
+    const nuevo=!t;
+    el.innerHTML=
+      '<div class="mcard" style="max-width:760px">'+
+      '<h3 style="margin-top:0">'+(nuevo?'Nuevo volquetero':'Editar volquetero')+'</h3>'+
+      '<div class="row2">'+
+        '<div class="field"><label>Nombre</label><input id="t_nombre" value="'+(nuevo?'':esc(t.nombre))+'"></div>'+
+        '<div class="field"><label>Documento (cedula/NIT)</label><input id="t_doc" value="'+(nuevo?'':esc(t.documento||''))+'"></div>'+
+      '</div>'+
+      '<div class="row2">'+
+        '<div class="field"><label>Telefono</label><input id="t_tel" value="'+(nuevo?'':esc(t.telefono||''))+'"></div>'+
+        '<div class="field"><label>Correo</label><input id="t_correo" value="'+(nuevo?'':esc(t.correo||''))+'"></div>'+
+      '</div>'+
+      '<div class="note" style="margin-top:4px">Datos bancarios para pagarle</div>'+
+      '<div class="row2">'+
+        '<div class="field"><label>Banco</label><input id="t_banco" value="'+(nuevo?'':esc(t.banco||''))+'"></div>'+
+        '<div class="field"><label>Numero de cuenta</label><input id="t_cuenta" value="'+(nuevo?'':esc(t.cuenta_numero||''))+'"></div>'+
+      '</div>'+
+      '<div class="field"><label>Tipo de cuenta</label><select id="t_tipo">'+
+        '<option value="ahorros"'+(!nuevo&&t.cuenta_tipo==='ahorros'?' selected':'')+'>Ahorros</option>'+
+        '<option value="corriente"'+(!nuevo&&t.cuenta_tipo==='corriente'?' selected':'')+'>Corriente</option>'+
+      '</select></div>'+
+      (nuevo?'':'<div class="field"><label>Estado</label><select id="t_activo"><option value="true"'+(t.activo?' selected':'')+'>Activo</option><option value="false"'+(!t.activo?' selected':'')+'>Inactivo</option></select></div>')+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bCancel">Cancelar</button><button class="btn primary" id="bSave">Guardar</button></div>'+
+      '</div>';
+    el.querySelector('#bCancel').onclick=lista;
+    el.querySelector('#bSave').onclick=async function(){
+      const btn=this, nombre=v(el,'t_nombre'); if(!nombre){ ctx.toast('Escribe el nombre.','error'); return; }
+      const activo=nuevo?true:(el.querySelector('#t_activo').value==='true');
+      btn.disabled=true; btn.textContent='Guardando...';
+      try{ const r=scalar(await ctx.rpc('rcd_volquetero_guardar',{
+          p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:nuevo?null:t.id,
+          p_nombre:nombre, p_documento:v(el,'t_doc'), p_telefono:v(el,'t_tel'), p_correo:v(el,'t_correo'),
+          p_banco:v(el,'t_banco'), p_cuenta_numero:v(el,'t_cuenta'), p_cuenta_tipo:el.querySelector('#t_tipo').value, p_activo:activo}));
+        if(r==='OK'){ ctx.toast('Volquetero guardado'); lista(); return; }
+        ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.','error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Guardar';
     };
   }
 
-  async function cargarViajes(){
-    const box=$('viajes'); box.innerHTML='<div class="empty">Cargando...</div>';
-    try{
-      const arr = await rpc('rcd_volq_mis_ordenes', {p_volquetero_id:ses.volquetero_id});
-      const vs = Array.isArray(arr)?arr:[];
-      $('tabViajes').textContent = 'Mis viajes'+(vs.length?' ('+vs.length+')':'');
-      if(!vs.length){ box.innerHTML='<div class="empty">No tienes viajes en curso.</div>'; return; }
-      box.innerHTML=''; vs.forEach(o=>box.appendChild(cardViaje(o)));
-    }catch(e){ box.innerHTML='<div class="empty">Error al cargar tus viajes.</div>'; }
+  async function anularVolquetero(t){
+    if(!(await ctx.confirm('Anular el volquetero "'+t.nombre+'"? Se ocultara, pero el historico queda.'))) return;
+    try{ const r=scalar(await ctx.rpc('rcd_volquetero_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:t.id}));
+      if(r==='OK'){ ctx.toast('Volquetero anulado'); lista(); return; }
+      ctx.toast(r==='TIENE_VEHICULOS'?'No se puede anular: tiene vehiculos activos. Anula primero los vehiculos.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.'),'error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
-  function cardViaje(o){
-    const d=document.createElement('div'); d.className='ocard mine';
-    const esRecepcion = o.tipo==='recepcion';
-    const yaCargado = o.estado==='en_ruta_disposicion';
-    let badge;
-    if(yaCargado) badge='<span class="badge" style="background:#FAEEDA;color:#854F0B">Esperando recepción</span>';
-    else if(o.estado==='en_ruta') badge='<span class="badge ruta">En ruta</span>';
-    else badge='<span class="badge asig">Asignada</span>';
-    let btn='', nota='';
-    if(yaCargado){
-      nota='<div style="font-size:12px;color:var(--muted);margin-top:8px"><i class="ti ti-clock"></i> Cargado. En la escombrera registran la recepción.</div>';
-    } else if(esRecepcion){
-      btn='<button class="bCarga">Cargué — tomar foto y avisar</button>';
-    } else {
-      if(o.estado==='asignada') btn='<button class="bGo">Sali — marcar En ruta</button>';
-      else if(o.estado==='en_ruta') btn='<button class="bDone">Termine — Completar</button>';
-    }
-    d.innerHTML='<div class="ohead"><span class="onum mono">'+esc(o.numero||'')+'</span>'+badge+'</div>'+
-      '<div class="oinfo">'+tipoIcon(o.tipo)+' · '+esc(o.material||'')+'<br>'+
-      '<i class="ti ti-map-pin"></i>'+esc(o.obra||'')+(o.cliente?(' · '+esc(o.cliente)):'')+'<br>'+
-      '<i class="ti ti-license"></i>Placa: '+esc(o.placa||'')+'</div>'+btn+nota;
-    const go=d.querySelector('.bGo'); if(go) go.onclick=()=>cambiarOrden(o,'en_ruta');
-    const dn=d.querySelector('.bDone'); if(dn) dn.onclick=()=>cambiarOrden(o,'completada');
-    const ca=d.querySelector('.bCarga'); if(ca) ca.onclick=()=>marcarCargado(o);
-    return d;
+  // ===== Nivel 2: detalle del volquetero + sus vehiculos =====
+  function detalle(t){
+    el.innerHTML=
+      '<div class="mcard" style="max-width:900px">'+
+      '<button class="btn ghost sm" id="bBack">&larr; Volqueteros</button>'+
+      '<h3 style="margin:12px 0 2px">'+esc(t.nombre)+'</h3>'+
+      '<p class="lead">'+esc(t.documento||'')+(t.telefono?' &middot; '+esc(t.telefono):'')+(t.banco?' &middot; '+esc(t.banco)+' '+esc(t.cuenta_numero||''):'')+'</p>'+
+      '<div id="secVeh" style="margin-top:8px"></div>'+
+      '</div>';
+    el.querySelector('#bBack').onclick=lista;
+    vehiculos(t);
   }
 
-  function cambiarOrden(o, estado){
-    const acc = estado==='en_ruta';
-    openModal('<h3>'+(acc?'Marcar En ruta':'Completar viaje')+'</h3>'+
-      '<p style="font-size:13.5px;color:var(--muted);line-height:1.5;margin:0 0 16px">'+
-      (acc?'Confirmas que saliste con el viaje '+esc(o.numero||'')+'?':'Confirmas que terminaste el viaje '+esc(o.numero||'')+'?')+'</p>'+
-      '<div style="display:flex;gap:8px"><button class="'+(acc?'bGo':'bDone')+'" id="mOk" style="flex:1">Si, confirmar</button>'+
-      '<button class="salir" id="mNo" style="flex:0 0 auto">Cancelar</button></div>');
-    $('mNo').onclick=closeModal;
-    $('mOk').onclick=async()=>{
-      $('mOk').disabled=true; $('mOk').textContent='Procesando...';
-      try{
-        const r = await rpc('rcd_volq_orden_estado', {p_volquetero_id:ses.volquetero_id, p_orden_id:o.orden_id, p_estado:estado});
-        closeModal();
-        if(r==='OK'){ toast(acc?'Viaje en ruta':'Viaje completado'); cargarTodo(); }
-        else { toast('No se pudo ('+esc(r)+').', true); cargarTodo(); }
-      }catch(e){ closeModal(); toast('Error de conexion.', true); }
+  async function vehiculos(t){
+    const cont=el.querySelector('#secVeh');
+    cont.innerHTML='<div class="loading">Cargando vehiculos...</div>';
+    let vs=[]; try{ const r=await ctx.rpc('rcd_vehiculos_lista',{p_volquetero_id:t.id}); if(Array.isArray(r)) vs=r; }catch(e){}
+    cont.innerHTML=
+      '<div style="display:flex;align-items:center;gap:10px"><b>Vehiculos</b>'+
+        (pCrear?'<button class="btn ghost sm" id="bNuevoVeh" style="margin-left:auto">+ Nueva volqueta</button>':'')+'</div>'+
+      (vs.length?
+        '<table class="mtable"><tr><th>Placa</th><th>Tamano</th><th>SOAT</th><th>Tecno</th><th>Estado docs</th><th></th></tr>'+
+        vs.map((vh,i)=>'<tr><td><b>'+esc(vh.placa)+'</b>'+(vh.conductor?'<br><span class="mono" style="font-size:11px;color:var(--muted)">'+esc(vh.conductor)+'</span>':'')+'</td>'+
+          '<td>'+esc(vh.tamano||'')+'</td>'+
+          '<td class="mono">'+(vh.vence_soat?esc(vh.vence_soat):'-')+'</td>'+
+          '<td class="mono">'+(vh.vence_tecno?esc(vh.vence_tecno):'-')+'</td>'+
+          '<td>'+badgeDoc(vh.estado_docs, vh.dias_min)+'</td>'+
+          '<td><div class="rowbtns">'+
+            (pEditar?'<button class="btn ghost sm" data-eveh="'+i+'">Editar</button>':'')+
+            (pEliminar?'<button class="btn ghost sm" data-aveh="'+i+'">Anular</button>':'')+
+          '</div></td></tr>').join('')+'</table>'+
+        '<div class="note">El SOAT/tecnomecanica vencida bloqueara el despacho; "Por vencer" avisa para notificar al volquetero.</div>'
+        : '<div class="empty">Este volquetero aun no tiene vehiculos.</div>');
+    if(pCrear) cont.querySelector('#bNuevoVeh').onclick=()=>formVehiculo(t,null,cont);
+    cont.querySelectorAll('[data-eveh]').forEach(b=>{const i=+b.dataset.eveh; b.onclick=()=>formVehiculo(t,vs[i],cont);});
+    cont.querySelectorAll('[data-aveh]').forEach(b=>{const i=+b.dataset.aveh; b.onclick=()=>anularVehiculo(t,vs[i]);});
+  }
+
+  async function formVehiculo(t, vh, cont){
+    const nuevo=!vh;
+    let tams=[]; try{ const r=await ctx.rpc('rcd_volquetas_lista',{p_gestor_id:ctx.ses.gestor_id}); if(Array.isArray(r)) tams=r; }catch(e){}
+    cont.innerHTML=
+      '<b>'+(nuevo?'Nueva volqueta':'Editar volqueta')+'</b>'+
+      '<div class="row2" style="margin-top:8px">'+
+        '<div class="field"><label>Placa</label><input id="v_placa" value="'+(nuevo?'':esc(vh.placa))+'" style="text-transform:uppercase"></div>'+
+        '<div class="field"><label>Tamano</label><select id="v_tam"><option value="">Selecciona...</option>'+
+          tams.map(tt=>'<option value="'+tt.id+'"'+(!nuevo&&vh.tamano_id===tt.id?' selected':'')+'>'+esc(tt.nombre)+'</option>').join('')+
+        '</select></div>'+
+      '</div>'+
+      '<div class="field"><label>Conductor / propietario (si es distinto al titular)</label><input id="v_cond" value="'+(nuevo?'':esc(vh.conductor||''))+'" placeholder="opcional"></div>'+
+      '<div class="row2">'+
+        '<div class="field"><label>Vence SOAT</label><input type="date" id="v_soat" value="'+(nuevo||!vh.vence_soat?'':esc(vh.vence_soat))+'"></div>'+
+        '<div class="field"><label>Vence tecnomecanica</label><input type="date" id="v_tecno" value="'+(nuevo||!vh.vence_tecno?'':esc(vh.vence_tecno))+'"></div>'+
+      '</div>'+
+      (nuevo?'':'<div class="field"><label>Estado</label><select id="v_activo"><option value="true"'+(vh.activo?' selected':'')+'>Activo</option><option value="false"'+(!vh.activo?' selected':'')+'>Inactivo</option></select></div>')+
+      '<div style="display:flex;gap:10px;margin-top:8px"><button class="btn ghost" id="bC">Cancelar</button><button class="btn primary" id="bS">Guardar</button></div>';
+    cont.querySelector('#bC').onclick=()=>vehiculos(t);
+    cont.querySelector('#bS').onclick=async function(){
+      const btn=this, placa=v(cont,'v_placa'), tam=cont.querySelector('#v_tam').value;
+      if(!placa){ ctx.toast('Escribe la placa.','error'); return; }
+      if(!tam){ ctx.toast('Selecciona el tamano.','error'); return; }
+      const activo=nuevo?true:(cont.querySelector('#v_activo').value==='true');
+      btn.disabled=true; btn.textContent='Guardando...';
+      try{ const r=scalar(await ctx.rpc('rcd_vehiculo_guardar',{
+          p_usuario_id:ctx.ses.id, p_gestor_id:ctx.ses.gestor_id, p_id:nuevo?null:vh.id, p_volquetero_id:t.id,
+          p_placa:placa, p_tamano_id:tam, p_conductor:v(cont,'v_cond'),
+          p_vence_soat:v(cont,'v_soat')||null, p_vence_tecno:v(cont,'v_tecno')||null, p_activo:activo}));
+        if(r==='OK'){ ctx.toast('Volqueta guardada'); vehiculos(t); return; }
+        ctx.toast(r==='PLACA_VACIA'?'Escribe la placa.':(r==='TAMANO_VACIO'?'Selecciona el tamano.':(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo guardar.')),'error');
+      }catch(e){ ctx.toast('Error de conexion.','error'); }
+      btn.disabled=false; btn.textContent='Guardar';
     };
   }
 
-  function marcarCargado(o){
-    openModal('<h3>Cargué — '+esc(o.numero||'')+'</h3>'+
-      '<p style="font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 12px">Toma una foto del material cargado. Al confirmar, el operador queda avisado de que vas en camino.</p>'+
-      '<div class="fotobox" id="fbox"><i class="ti ti-camera"></i>Tomar foto del cargue</div>'+
-      '<img id="fprev" class="fotoprev">'+
-      '<input id="fInput" type="file" accept="image/*" capture="environment" style="display:none">'+
-      '<div class="err" id="cErr"></div>'+
-      '<div style="display:flex;gap:8px"><button class="bCarga" id="mOk" style="flex:1">Confirmar cargado</button>'+
-      '<button class="salir" id="mNo" style="flex:0 0 auto">Cancelar</button></div>');
-    let fotoFile=null;
-    $('mNo').onclick=closeModal;
-    $('fbox').onclick=()=>$('fInput').click();
-    $('fInput').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; fotoFile=f;
-      const url=URL.createObjectURL(f); $('fprev').src=url; $('fprev').style.display='block'; $('fbox').style.display='none'; };
-    $('mOk').onclick=async()=>{
-      const e=$('cErr'); e.classList.remove('show');
-      if(!fotoFile){ e.textContent='Toma la foto del cargue.'; e.classList.add('show'); return; }
-      $('mOk').disabled=true; $('mOk').textContent='Subiendo foto...';
-      try{
-        const fotoUrl=await subirFoto(fotoFile, 'cargue_'+(o.numero||'ord'));
-        $('mOk').textContent='Avisando...';
-        const r=await rpc('rcd_volq_cargado', {p_volquetero_id:ses.volquetero_id, p_orden_id:o.orden_id, p_foto_url:fotoUrl});
-        closeModal();
-        if(r==='OK'){ toast('Cargado · operador avisado'); cargarTodo(); }
-        else {
-          const msgs={NO_TUYA:'Esta orden no es tuya.',NO_RECEPCION:'Esta orden no es de recepcion.',NO_APLICA:'La orden no esta lista para cargar.'};
-          toast(msgs[r]||('No se pudo ('+esc(r)+').'), true); cargarTodo();
-        }
-      }catch(err){ e.textContent='Error al subir la foto. Revisa tu internet.'; e.classList.add('show');
-        $('mOk').disabled=false; $('mOk').textContent='Confirmar cargado'; }
-    };
+  async function anularVehiculo(t, vh){
+    if(!(await ctx.confirm('Anular la volqueta "'+vh.placa+'"? Se ocultara, pero el historico queda.'))) return;
+    try{ const r=scalar(await ctx.rpc('rcd_vehiculo_anular',{p_usuario_id:ctx.ses.id,p_gestor_id:ctx.ses.gestor_id,p_id:vh.id}));
+      if(r==='OK'){ ctx.toast('Volqueta anulada'); vehiculos(t); return; }
+      ctx.toast(r==='SIN_PERMISO'?'No tienes permiso.':'No se pudo anular.','error');
+    }catch(e){ ctx.toast('Error de conexion.','error'); }
   }
 
-  function abrirClave(){
-    openModal('<h3>Cambiar mi clave</h3>'+
-      '<div class="field"><label>Clave actual</label><input id="kAct" type="password"></div>'+
-      '<div class="field"><label>Clave nueva (min. 4)</label><input id="kNue" type="password"></div>'+
-      '<div class="err" id="kErr"></div>'+
-      '<div style="display:flex;gap:8px;margin-top:8px"><button class="bTake" id="kOk" style="flex:1">Guardar</button>'+
-      '<button class="salir" id="kNo" style="flex:0 0 auto">Cancelar</button></div>');
-    $('kNo').onclick=closeModal;
-    $('kOk').onclick=async()=>{
-      const a=$('kAct').value.trim(), n=$('kNue').value.trim(); const e=$('kErr');
-      e.classList.remove('show');
-      if(n.length<4){ e.textContent='La clave nueva debe tener al menos 4 caracteres.'; e.classList.add('show'); return; }
-      $('kOk').disabled=true; $('kOk').textContent='Guardando...';
-      try{
-        const r = await rpc('rcd_volq_cambiar_clave', {p_volquetero_id:ses.volquetero_id, p_actual:a, p_nueva:n});
-        if(r==='OK'){ closeModal(); ses.clave_default=(n==='0000'); sessionStorage.setItem('rcd_volq_ses',JSON.stringify(ses)); $('keyWarn').innerHTML=''; toast('Clave actualizada'); }
-        else if(r==='CLAVE_ACTUAL_MAL'){ e.textContent='La clave actual no es correcta.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
-        else { e.textContent='No se pudo cambiar.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
-      }catch(err){ e.textContent='Error de conexion.'; e.classList.add('show'); $('kOk').disabled=false; $('kOk').textContent='Guardar'; }
-    };
-  }
-
-  function openModal(html){ $('modalRoot').innerHTML='<div class="modal"><div class="box">'+html+'</div></div>'; }
-  function closeModal(){ $('modalRoot').innerHTML=''; }
-
-  document.addEventListener('keydown', e=>{ if(e.key==='Enter' && !$('vLogin').classList.contains('hidden')) entrar(); });
-  (function init(){ const s=sessionStorage.getItem('rcd_volq_ses'); if(s){ try{ ses=JSON.parse(s); mostrarPanel(); }catch(e){} } })();
-</script>
-</body>
-</html>
+  lista();
+};
